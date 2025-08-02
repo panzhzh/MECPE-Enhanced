@@ -31,15 +31,15 @@ model:
   # Multimodal features (modern encoders)
   use_video: false  # Whether to use video features
   use_audio: false  # Whether to use audio features  
-  freeze_encoders: true  # Whether to freeze pretrained encoder weights
+  freeze_encoders: false  # Whether to freeze pretrained encoder weights
   
   # Modern encoder specifications
   video_model: "facebook/timesformer-base-finetuned-k400"  # TimeSformer
   audio_model: "facebook/wav2vec2-base-960h"  # Wav2Vec2
   
   # Dropout rates (following original TensorFlow)
-  word_dropout: 0.5  # keep_prob1
-  final_dropout: 1.0  # keep_prob2 (no dropout)
+  word_dropout: 0.5  # keep_prob1  
+  final_dropout: 0.0  # keep_prob2 (no dropout - 1.0 means 100% dropout, 0.0 means no dropout)
   video_dropout: 0.5  # keep_prob_v
   audio_dropout: 0.5  # keep_prob_a
   
@@ -54,7 +54,7 @@ model:
 
 # Training Configuration
 training:
-  # Step1 settings
+  # Conv-level settings
   batch_size: 8 
   learning_rate: 0.00002  # 2e-5 in decimal format
   num_epochs: 10
@@ -63,7 +63,7 @@ training:
   gradient_clip_val: 1.0
   
   # Pair-level settings (following original TensorFlow)
-  pair_batch_size: 200  # Original pair training batch size
+  pair_batch_size: 100  # Original pair training batch size
   pair_learning_rate: 0.005  # Original pair training learning rate
   pair_num_epochs: 12  # training_iter
   l2_reg: 0.00001  # L2 regularization (shared with Step1)

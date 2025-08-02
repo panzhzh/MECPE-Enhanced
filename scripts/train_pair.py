@@ -16,7 +16,7 @@ import time
 from src.utils.config import Config
 from src.data.pair_dataset import create_pair_datasets, collate_pair_samples
 from src.models.pair_model import create_pair_model
-from src.evaluation.codalab_metrics import CodaLabMetrics
+from src.evaluation.pair_level_metrics import PairLevelMetrics
 
 def run_epoch(model, dataloader, optimizer=None, device='cpu', is_train=True, config=None):
     """Run one epoch (train or eval)"""
@@ -25,12 +25,11 @@ def run_epoch(model, dataloader, optimizer=None, device='cpu', is_train=True, co
     else:
         model.eval()
     
-    # Initialize metrics
-    use_emotion_categories = config.model.use_emotion_categories if config else False
-    metrics = CodaLabMetrics()
-    
+    # For training epochs, use simple accuracy tracking
+    use_emotion_categories = config.model.use_emotion_categories if config else False  
     total_loss = 0.0
-    num_batches = 0
+    correct_predictions = 0
+    total_samples = 0
     
     with torch.set_grad_enabled(is_train):
         for batch in tqdm(dataloader, desc="Training" if is_train else "Evaluating"):
@@ -72,38 +71,29 @@ def run_epoch(model, dataloader, optimizer=None, device='cpu', is_train=True, co
             # Update metrics
             predictions = torch.argmax(logits, dim=-1).cpu().numpy()
             
-            # Update Pair metrics
-            metrics.update(
-                loss=loss.item(),
-                pair_id_all=batch.get('true_pairs', []),  # Will be added in evaluation
-                pair_id=batch['pair_ids'],
-                pred_y=predictions
-            )
-            
-            total_loss += loss.item()
-            num_batches += 1
+            # Update simple training metrics
+            batch_size = labels.size(0)
+            total_loss += loss.item() * batch_size
+            correct_predictions += np.sum(predictions == labels.cpu().numpy())
+            total_samples += batch_size
     
-    # For proper Pair evaluation, we need to collect all predictions first
-    # This is a simplified version - full evaluation requires collecting all pairs
-    avg_loss = total_loss / num_batches if num_batches > 0 else 0.0
+    # Return simple metrics
+    avg_loss = total_loss / total_samples if total_samples > 0 else 0.0
+    accuracy = correct_predictions / total_samples if total_samples > 0 else 0.0
     
     return {
         'avg_loss': avg_loss,
-        'accuracy': np.mean([1 if p == l else 0 for p, l in zip(predictions, labels.cpu().numpy())]) if num_batches > 0 else 0.0
+        'accuracy': accuracy
     }
 
 def evaluate_pair_full(model, dataloader, device, config):
     """
-    Full Pair evaluation following original methodology
-    Collect all predictions and compute Pair metrics properly
+    Full Pair evaluation using proper pair-level metrics
     """
     model.eval()
     
-    all_predictions = []
-    all_pair_ids = []
-    all_true_pairs = set()  # This should come from the original dataset
-    total_loss = 0.0
-    num_batches = 0
+    # Use proper pair-level metrics
+    metrics = PairLevelMetrics()
     
     with torch.no_grad():
         for batch in tqdm(dataloader, desc="Full Evaluation"):
@@ -134,33 +124,36 @@ def evaluate_pair_full(model, dataloader, device, config):
             loss_dict = model.compute_loss(logits, labels_onehot)
             loss = loss_dict['total_loss']
             
-            # Collect predictions
+            # Get predictions
             predictions = torch.argmax(logits, dim=-1).cpu().numpy()
-            all_predictions.extend(predictions.tolist())
-            all_pair_ids.extend(batch['pair_ids'])
             
-            # Collect true pairs
-            for i, label in enumerate(labels.cpu().numpy()):
-                if label == 1:  # This is a true pair
-                    all_true_pairs.add(batch['pair_ids'][i])
+            # Group by document and update metrics
+            doc_data = {}  # doc_id -> {predicted_pairs: [], true_pairs: []}
             
-            total_loss += loss.item()
-            num_batches += 1
+            for i, pair_id in enumerate(batch['pair_ids']):
+                doc_id, emo_utt, cause_utt, emotion_cat = pair_id
+                
+                if doc_id not in doc_data:
+                    doc_data[doc_id] = {'predicted_pairs': [], 'true_pairs': []}
+                
+                # Add prediction if model predicts this is a true pair
+                if predictions[i] == 1:
+                    doc_data[doc_id]['predicted_pairs'].append((emo_utt, cause_utt, emotion_cat))
+                
+                # Add true pair if label is 1
+                if labels[i].item() == 1:
+                    doc_data[doc_id]['true_pairs'].append((emo_utt, cause_utt, emotion_cat))
+            
+            # Update metrics for each document
+            for doc_id, data in doc_data.items():
+                metrics.update(
+                    loss=loss.item() / len(doc_data),  # Distribute loss across documents in batch
+                    doc_id=doc_id,
+                    pair_predictions=data['predicted_pairs'],
+                    true_pairs=data['true_pairs']
+                )
     
-    # Compute Pair metrics
-    use_emotion_categories = config.model.use_emotion_categories
-    metrics = CodaLabMetrics()
-    
-    avg_loss = total_loss / num_batches if num_batches > 0 else 0.0
-    
-    # Update metrics with all collected data
-    metrics.update(
-        loss=avg_loss,
-        pair_id_all=list(all_true_pairs),
-        pair_id=all_pair_ids,
-        pred_y=np.array(all_predictions)
-    )
-    
+    # Compute and return final metrics
     return metrics.compute()
 
 def main():
@@ -247,18 +240,21 @@ def main():
         print("Evaluating on dev set...")
         dev_metrics = evaluate_pair_full(model, dev_loader, device, config)
         
-        # Print main metrics
+        # Print main metrics using correct keys from PairLevelMetrics
         if config.model.use_emotion_categories:
-            main_f1 = dev_metrics.get('filtered_weighted_f1', 0.0)
+            main_f1 = dev_metrics.get('weighted_f1', 0.0)
             print(f"Dev Weighted F1: {main_f1:.4f}")
-            print(f"Dev 4-class F1: {dev_metrics.get('filtered_weighted_f1_4class', 0.0):.4f}")
+            print(f"Dev Weighted Precision: {dev_metrics.get('weighted_precision', 0.0):.4f}")
+            print(f"Dev Weighted Recall: {dev_metrics.get('weighted_recall', 0.0):.4f}")
         else:
-            main_f1 = dev_metrics.get('filtered_f1', 0.0)
-            print(f"Dev F1: {main_f1:.4f}")
-            print(f"Dev Precision: {dev_metrics.get('filtered_precision', 0.0):.4f}")
-            print(f"Dev Recall: {dev_metrics.get('filtered_recall', 0.0):.4f}")
+            main_f1 = dev_metrics.get('pair_f1', 0.0)
+            print(f"Dev Pair F1: {main_f1:.4f}")
+            print(f"Dev Pair Precision: {dev_metrics.get('pair_precision', 0.0):.4f}")
+            print(f"Dev Pair Recall: {dev_metrics.get('pair_recall', 0.0):.4f}")
         
-        print(f"Keep Rate: {dev_metrics.get('keep_rate', 0.0):.4f}")
+        # Debug information
+        print(f"Predicted/True/Correct pairs: {dev_metrics.get('num_predicted_pairs', 0)}/{dev_metrics.get('num_true_pairs', 0)}/{dev_metrics.get('num_correct_pairs', 0)}")
+        print(f"Documents processed: {dev_metrics.get('num_documents', 0)}")
         
         # Save best model
         if main_f1 > best_f1:
@@ -291,10 +287,10 @@ def main():
             print(f"Test Weighted F1: {test_f1:.4f}")
             print(f"Test 4-class F1: {test_metrics.get('filtered_weighted_f1_4class', 0.0):.4f}")
         else:
-            test_f1 = test_metrics.get('filtered_f1', 0.0)
+            test_f1 = test_metrics.get('pair_f1', 0.0)
             print(f"Test F1: {test_f1:.4f}")
-            print(f"Test Precision: {test_metrics.get('filtered_precision', 0.0):.4f}")
-            print(f"Test Recall: {test_metrics.get('filtered_recall', 0.0):.4f}")
+            print(f"Test Precision: {test_metrics.get('pair_precision', 0.0):.4f}")
+            print(f"Test Recall: {test_metrics.get('pair_recall', 0.0):.4f}")
 
 if __name__ == "__main__":
     main()

@@ -150,8 +150,9 @@ class PairModel(nn.Module):
             nn.Linear(256, 2)  # Binary classification
         )
         
-        # Initialize position embeddings
+        # Initialize position and classifier embeddings
         self._init_position_embeddings()
+        self._init_classifier()
     
     def _init_position_embeddings(self):
         """Initialize position embeddings following original implementation"""
@@ -160,6 +161,15 @@ class PairModel(nn.Module):
         
         if hasattr(self, 'emotion_embedding'):
             nn.init.uniform_(self.emotion_embedding.weight, -0.1, 0.1)
+    
+    def _init_classifier(self):
+        """Initialize classifier layers with proper bias for class imbalance"""
+        for module in self.classifier.modules():
+            if isinstance(module, nn.Linear):
+                nn.init.xavier_uniform_(module.weight)
+                if module.bias is not None:
+                    # Initialize bias to zero for balanced start
+                    nn.init.zeros_(module.bias)
     
     def forward(self, 
                 # Text inputs (tokenized)
@@ -233,7 +243,7 @@ class PairModel(nn.Module):
     
     def compute_loss(self, logits: torch.Tensor, labels: torch.Tensor) -> Dict[str, torch.Tensor]:
         """
-        Compute loss following original implementation
+        Compute loss with class weighting for imbalanced data
         
         Args:
             logits: [batch_size, n_class] 
@@ -242,14 +252,25 @@ class PairModel(nn.Module):
         Returns:
             Dictionary with loss components
         """
-        # Convert logits to probabilities 
-        probs = F.softmax(logits, dim=-1)
+        # Convert one-hot labels to class indices for CrossEntropyLoss
+        class_labels = torch.argmax(labels, dim=-1)  # [batch_size]
         
-        # Cross-entropy loss (following original: -sum(y * log(pred)))
-        # Add small epsilon to prevent log(0)
-        probs = torch.clamp(probs, min=1e-8, max=1.0)
-        ce_loss = -torch.sum(labels * torch.log(probs), dim=-1)
-        ce_loss = torch.mean(ce_loss)
+        # Use Focal Loss to handle extreme class imbalance
+        # Focal Loss automatically handles imbalance without manual weight tuning
+        ce_loss_raw = F.cross_entropy(logits, class_labels, reduction='none')
+        
+        # Convert to probabilities and get the probability of the true class
+        probs = F.softmax(logits, dim=-1)
+        pt = probs.gather(1, class_labels.unsqueeze(1)).squeeze(1)  # p_t
+        
+        # Focal loss parameters
+        alpha = 0.25  # Weight for positive class
+        gamma = 2.0   # Focusing parameter
+        
+        # Apply focal loss formula: -α(1-pt)^γ * log(pt)
+        alpha_t = alpha * class_labels + (1 - alpha) * (1 - class_labels)
+        focal_weight = alpha_t * (1 - pt) ** gamma
+        ce_loss = torch.mean(focal_weight * ce_loss_raw)
         
         # L2 regularization for classifier weights
         l2_reg = 0.0
