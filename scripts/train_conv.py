@@ -11,9 +11,9 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from src.utils.config import Config
-from src.data.dataset import ECFDataset, collate_conversations
-from src.models.baseline_model import create_baseline_model
-from src.evaluation.metrics import SimpleMetrics
+from src.data.conv_dataset import ECFDataset, collate_conversations
+from src.models.conv_model import create_baseline_model
+from src.evaluation.conv_metrics import Step1Metrics
 
 def run_epoch(model, dataloader, optimizer=None, device='cpu', is_train=True):
     """Run one epoch (train or eval)"""
@@ -22,7 +22,7 @@ def run_epoch(model, dataloader, optimizer=None, device='cpu', is_train=True):
     else:
         model.eval()
     
-    metrics = SimpleMetrics()
+    metrics = Step1Metrics()
     
     with torch.set_grad_enabled(is_train):
         for batch in tqdm(dataloader, desc="Training" if is_train else "Evaluating"):
@@ -60,10 +60,7 @@ def run_epoch(model, dataloader, optimizer=None, device='cpu', is_train=True):
                 cause_logits=outputs['cause_logits'],
                 emotion_labels=emotion_labels,
                 cause_labels=cause_labels,
-                attention_mask=attention_mask,
-                conv_ids=batch.get('conv_ids'),
-                emotions=batch.get('emotions'),
-                emotion_cause_pairs=batch.get('emotion_cause_pairs')
+                attention_mask=attention_mask
             )
     
     return metrics.compute()
@@ -121,34 +118,22 @@ def main():
         train_metrics = run_epoch(model, train_loader, optimizer, device, is_train=True)
         print(f"Train Loss: {train_metrics['avg_loss']:.4f}")
         
-        # Print Step1 metrics
-        if 'step1_emotion_f1' in train_metrics:
-            print(f"Train Step1 Emotion F1: {train_metrics['step1_emotion_f1']:.4f}")
-            print(f"Train Step1 Cause F1: {train_metrics['step1_cause_f1']:.4f}")
-            print(f"Train Step1 Avg F1: {train_metrics['step1_avg_f1']:.4f}")
-        
-        # Print CodaLab metrics
-        if 'codalab_weighted_f1' in train_metrics:
-            print(f"Train CodaLab Weighted F1: {train_metrics['codalab_weighted_f1']:.4f}")
-            print(f"Train CodaLab Pair F1: {train_metrics['codalab_pair_f1']:.4f}")
+        # Print conversation-level metrics
+        print(f"Train Emotion F1: {train_metrics['emotion_f1']:.4f}")
+        print(f"Train Cause F1: {train_metrics['cause_f1']:.4f}")
+        print(f"Train Avg F1: {train_metrics['avg_f1']:.4f}")
         
         # Test evaluation
         test_metrics = run_epoch(model, test_loader, device=device, is_train=False)
         print(f"Test Loss: {test_metrics['avg_loss']:.4f}")
         
-        # Print Step1 metrics
-        if 'step1_emotion_f1' in test_metrics:
-            print(f"Test Step1 Emotion F1: {test_metrics['step1_emotion_f1']:.4f}")
-            print(f"Test Step1 Cause F1: {test_metrics['step1_cause_f1']:.4f}")
-            print(f"Test Step1 Avg F1: {test_metrics['step1_avg_f1']:.4f}")
+        # Print conversation-level metrics
+        print(f"Test Emotion F1: {test_metrics['emotion_f1']:.4f}")
+        print(f"Test Cause F1: {test_metrics['cause_f1']:.4f}")
+        print(f"Test Avg F1: {test_metrics['avg_f1']:.4f}")
         
-        # Print CodaLab metrics
-        if 'codalab_weighted_f1' in test_metrics:
-            print(f"Test CodaLab Weighted F1: {test_metrics['codalab_weighted_f1']:.4f}")
-            print(f"Test CodaLab Pair F1: {test_metrics['codalab_pair_f1']:.4f}")
-        
-        # Save best model based on Step1 avg F1 or CodaLab weighted F1
-        main_metric = test_metrics.get('step1_avg_f1', test_metrics.get('codalab_weighted_f1', 0.0))
+        # Save best model based on conversation-level avg F1
+        main_metric = test_metrics['avg_f1']
         if main_metric > best_f1:
             best_f1 = main_metric
             torch.save(model.state_dict(), 
