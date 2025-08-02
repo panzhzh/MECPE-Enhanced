@@ -78,3 +78,6 @@ checkpoints/
 
 # Temporary files
 project_names.md
+*.tar.gz
+*.tar
+*.mp4
