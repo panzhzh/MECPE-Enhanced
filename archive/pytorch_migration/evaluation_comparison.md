@@ -137,7 +137,7 @@ pair_id_all = [[doc_id, emo_id, cau_id, emotion_idx], ...]
 - **Step1**: Precision, Recall, F1 (二元分类)
 - **Step2**: 
   - 基础P/R/F1
-  - 加权平均F1 (6类情感)
+  - 加权平均F1 (7类情感)
   - 部分加权F1 (4类主要情感，排除disgust/fear)
 
 ### 官方评估指标

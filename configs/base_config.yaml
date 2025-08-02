@@ -62,10 +62,10 @@ training:
   weight_decay: 0.01
   gradient_clip_val: 1.0
   
-  # Step2 settings (following original TensorFlow)
-  step2_batch_size: 200  # Original Step2 batch size
-  step2_learning_rate: 0.005  # Original Step2 learning rate
-  step2_num_epochs: 12  # training_iter
+  # Pair-level settings (following original TensorFlow)
+  pair_batch_size: 200  # Original pair training batch size
+  pair_learning_rate: 0.005  # Original pair training learning rate
+  pair_num_epochs: 12  # training_iter
   l2_reg: 0.00001  # L2 regularization (shared with Step1)
   
   # Hardware

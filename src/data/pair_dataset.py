@@ -11,7 +11,7 @@ from transformers import RobertaTokenizer
 import json
 import ast
 
-class Step2PairDataset(Dataset):
+class PairDataset(Dataset):
     """
     Step2 dataset that generates emotion-cause pairs from Step1 results
     Following the original TensorFlow data loading logic
@@ -216,7 +216,7 @@ class Step2PairDataset(Dataset):
         
         return item
 
-def collate_step2_pairs(batch: List[Dict]) -> Dict[str, torch.Tensor]:
+def collate_pair_samples(batch: List[Dict]) -> Dict[str, torch.Tensor]:
     """
     Collate function for Step2 pair dataset
     """
@@ -242,7 +242,7 @@ def collate_step2_pairs(batch: List[Dict]) -> Dict[str, torch.Tensor]:
     
     return result
 
-def create_step2_datasets(config, tokenizer: Optional[RobertaTokenizer] = None):
+def create_pair_datasets(config, tokenizer: Optional[RobertaTokenizer] = None):
     """
     Create Step2 datasets from Step1 results
     
@@ -266,8 +266,8 @@ def create_step2_datasets(config, tokenizer: Optional[RobertaTokenizer] = None):
             raise FileNotFoundError(f"Step1 result file not found: {file_path}. Please run Step1 training first.")
     
     # Create datasets
-    train_dataset = Step2PairDataset(train_file, config, tokenizer, "train")
-    dev_dataset = Step2PairDataset(dev_file, config, tokenizer, "dev")
-    test_dataset = Step2PairDataset(test_file, config, tokenizer, "test")
+    train_dataset = PairDataset(train_file, config, tokenizer, "train")
+    dev_dataset = PairDataset(dev_file, config, tokenizer, "dev")
+    test_dataset = PairDataset(test_file, config, tokenizer, "test")
     
     return train_dataset, dev_dataset, test_dataset

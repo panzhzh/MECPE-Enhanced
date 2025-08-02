@@ -98,7 +98,7 @@ class ModernMultimodalEncoder(nn.Module):
         audio_features = outputs.last_hidden_state.mean(dim=1)  # [batch_size, audio_hidden_size]
         return self.audio_projection(audio_features)  # [batch_size, text_hidden_size]
 
-class Step2Model(nn.Module):
+class PairModel(nn.Module):
     """
     Step2 Model: Emotion-Cause Pair Classification  
     Modern implementation with 2025 encoders (RoBERTa + TimeSformer + Wav2Vec2)
@@ -265,14 +265,14 @@ class Step2Model(nn.Module):
             'l2_loss': l2_reg
         }
 
-def create_step2_model(config) -> Step2Model:
+def create_pair_model(config) -> PairModel:
     """
-    Create Step2 model instance
+    Create pair model instance
     
     Args:
         config: Configuration object
         
     Returns:
-        Step2Model instance
+        PairModel instance
     """
-    return Step2Model(config)
+    return PairModel(config)

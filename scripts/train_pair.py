@@ -1,5 +1,5 @@
 """
-Step2 Training Script for MECPE
+Pair-level Training Script for MECPE
 Emotion-Cause Pair Classification using modern encoders
 """
 import sys
@@ -14,9 +14,9 @@ from transformers import RobertaTokenizer
 import time
 
 from src.utils.config import Config
-from src.data.step2_dataset import create_step2_datasets, collate_step2_pairs
-from src.models.step2_model import create_step2_model
-from src.evaluation.step2_metrics import Step2Metrics
+from src.data.pair_dataset import create_pair_datasets, collate_pair_samples
+from src.models.pair_model import create_pair_model
+from src.evaluation.codalab_metrics import CodaLabMetrics
 
 def run_epoch(model, dataloader, optimizer=None, device='cpu', is_train=True, config=None):
     """Run one epoch (train or eval)"""
@@ -27,7 +27,7 @@ def run_epoch(model, dataloader, optimizer=None, device='cpu', is_train=True, co
     
     # Initialize metrics
     use_emotion_categories = config.model.use_emotion_categories if config else False
-    metrics = Step2Metrics(use_emotion_categories=use_emotion_categories)
+    metrics = CodaLabMetrics()
     
     total_loss = 0.0
     num_batches = 0
@@ -72,7 +72,7 @@ def run_epoch(model, dataloader, optimizer=None, device='cpu', is_train=True, co
             # Update metrics
             predictions = torch.argmax(logits, dim=-1).cpu().numpy()
             
-            # Update Step2 metrics
+            # Update Pair metrics
             metrics.update(
                 loss=loss.item(),
                 pair_id_all=batch.get('true_pairs', []),  # Will be added in evaluation
@@ -83,7 +83,7 @@ def run_epoch(model, dataloader, optimizer=None, device='cpu', is_train=True, co
             total_loss += loss.item()
             num_batches += 1
     
-    # For proper Step2 evaluation, we need to collect all predictions first
+    # For proper Pair evaluation, we need to collect all predictions first
     # This is a simplified version - full evaluation requires collecting all pairs
     avg_loss = total_loss / num_batches if num_batches > 0 else 0.0
     
@@ -92,10 +92,10 @@ def run_epoch(model, dataloader, optimizer=None, device='cpu', is_train=True, co
         'accuracy': np.mean([1 if p == l else 0 for p, l in zip(predictions, labels.cpu().numpy())]) if num_batches > 0 else 0.0
     }
 
-def evaluate_step2_full(model, dataloader, device, config):
+def evaluate_pair_full(model, dataloader, device, config):
     """
-    Full Step2 evaluation following original methodology
-    Collect all predictions and compute Step2 metrics properly
+    Full Pair evaluation following original methodology
+    Collect all predictions and compute Pair metrics properly
     """
     model.eval()
     
@@ -147,9 +147,9 @@ def evaluate_step2_full(model, dataloader, device, config):
             total_loss += loss.item()
             num_batches += 1
     
-    # Compute Step2 metrics
+    # Compute Pair metrics
     use_emotion_categories = config.model.use_emotion_categories
-    metrics = Step2Metrics(use_emotion_categories=use_emotion_categories)
+    metrics = CodaLabMetrics()
     
     avg_loss = total_loss / num_batches if num_batches > 0 else 0.0
     
@@ -164,8 +164,8 @@ def evaluate_step2_full(model, dataloader, device, config):
     return metrics.compute()
 
 def main():
-    """Main Step2 training function"""
-    print("🚀 Starting Step2 Training (Emotion-Cause Pair Classification)...")
+    """Main Pair training function"""
+    print("🚀 Starting Pair Training (Emotion-Cause Pair Classification)...")
     
     # Load config
     config = Config("configs/base_config.yaml")
@@ -178,9 +178,9 @@ def main():
     tokenizer = RobertaTokenizer.from_pretrained(config.model.text_model)
     
     # Create datasets
-    print("\n📊 Loading Step2 datasets...")
+    print("\n📊 Loading Pair datasets...")
     try:
-        train_dataset, dev_dataset, test_dataset = create_step2_datasets(config, tokenizer)
+        train_dataset, dev_dataset, test_dataset = create_pair_datasets(config, tokenizer)
     except FileNotFoundError as e:
         print(f"❌ Error: {e}")
         print("💡 Please run Step1 training first to generate the required prediction files.")
@@ -193,26 +193,26 @@ def main():
     # Create dataloaders
     train_loader = DataLoader(
         train_dataset, 
-        batch_size=config.training.step2_batch_size,
+        batch_size=config.training.pair_batch_size,
         shuffle=True, 
-        collate_fn=collate_step2_pairs
+        collate_fn=collate_pair_samples
     )
     dev_loader = DataLoader(
         dev_dataset,
-        batch_size=config.training.step2_batch_size,
+        batch_size=config.training.pair_batch_size,
         shuffle=False,
-        collate_fn=collate_step2_pairs
+        collate_fn=collate_pair_samples
     )
     test_loader = DataLoader(
         test_dataset,
-        batch_size=config.training.step2_batch_size,
+        batch_size=config.training.pair_batch_size,
         shuffle=False,
-        collate_fn=collate_step2_pairs
+        collate_fn=collate_pair_samples
     )
     
     # Create model
-    print("\n🧠 Creating Step2 model...")
-    model = create_step2_model(config)
+    print("\n🧠 Creating Pair model...")
+    model = create_pair_model(config)
     device = torch.device(config.training.device)
     model.to(device)
     
@@ -222,22 +222,22 @@ def main():
     print(f"Total parameters: {total_params:,}")
     print(f"Trainable parameters: {trainable_params:,}")
     
-    # Create optimizer (following original Step2 settings)
+    # Create optimizer (following original Pair settings)
     optimizer = torch.optim.Adam(
         model.parameters(),
-        lr=config.training.step2_learning_rate,
+        lr=config.training.pair_learning_rate,
         weight_decay=config.training.l2_reg
     )
     
     # Training loop
-    print(f"\n🎯 Training for {config.training.step2_num_epochs} epochs...")
+    print(f"\n🎯 Training for {config.training.pair_num_epochs} epochs...")
     
     best_f1 = 0.0
     best_epoch = 0
     
-    for epoch in range(config.training.step2_num_epochs):
+    for epoch in range(config.training.pair_num_epochs):
         start_time = time.time()
-        print(f"\n=== Epoch {epoch + 1}/{config.training.step2_num_epochs} ===")
+        print(f"\n=== Epoch {epoch + 1}/{config.training.pair_num_epochs} ===")
         
         # Training
         train_metrics = run_epoch(model, train_loader, optimizer, device, is_train=True, config=config)
@@ -245,7 +245,7 @@ def main():
         
         # Evaluation on dev set
         print("Evaluating on dev set...")
-        dev_metrics = evaluate_step2_full(model, dev_loader, device, config)
+        dev_metrics = evaluate_pair_full(model, dev_loader, device, config)
         
         # Print main metrics
         if config.model.use_emotion_categories:
@@ -266,7 +266,7 @@ def main():
             best_epoch = epoch + 1
             
             # Save model
-            model_save_path = os.path.join(config.training.save_dir, 'best_step2_model.pt')
+            model_save_path = os.path.join(config.training.save_dir, 'best_pair_model.pt')
             os.makedirs(os.path.dirname(model_save_path), exist_ok=True)
             torch.save(model.state_dict(), model_save_path)
             print(f"💾 Saved new best model (F1: {best_f1:.4f})")
@@ -281,10 +281,10 @@ def main():
     if best_f1 > 0:
         print("\n📊 Final evaluation on test set...")
         # Load best model
-        model_save_path = os.path.join(config.training.save_dir, 'best_step2_model.pt')
+        model_save_path = os.path.join(config.training.save_dir, 'best_pair_model.pt')
         model.load_state_dict(torch.load(model_save_path))
         
-        test_metrics = evaluate_step2_full(model, test_loader, device, config)
+        test_metrics = evaluate_pair_full(model, test_loader, device, config)
         
         if config.model.use_emotion_categories:
             test_f1 = test_metrics.get('filtered_weighted_f1', 0.0)
