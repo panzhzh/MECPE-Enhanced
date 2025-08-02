@@ -156,6 +156,83 @@ def main():
             print(f"💾 Saved new best model (F1: {best_f1:.4f})")
     
     print(f"\n🎉 Training completed! Best Test F1: {best_f1:.4f}")
+    
+    # Generate Step2 input files from best model predictions
+    print("\n📝 Generating Step2 input files...")
+    generate_step2_input_files(model, train_loader, dev_loader, test_loader, config, device)
+
+def generate_step2_input_files(model, train_loader, dev_loader, test_loader, config, device):
+    """Generate Step2 input files from Step1 predictions"""
+    model.eval()
+    
+    # Create output directory
+    step2_input_dir = os.path.join(config.training.save_dir, "step1_results")
+    os.makedirs(step2_input_dir, exist_ok=True)
+    
+    # Process each dataset
+    datasets = [
+        (train_loader, "train_predictions.txt", "train"),
+        (dev_loader, "dev_predictions.txt", "dev"), 
+        (test_loader, "test_predictions.txt", "test")
+    ]
+    
+    emotion_idx_rev = {0: 'neutral', 1: 'anger', 2: 'disgust', 3: 'fear', 4: 'joy', 5: 'sadness', 6: 'surprise'}
+    
+    for dataloader, filename, split_name in datasets:
+        output_path = os.path.join(step2_input_dir, filename)
+        print(f"Generating {split_name} predictions -> {output_path}")
+        
+        with open(output_path, 'w', encoding='utf-8') as f:
+            with torch.no_grad():
+                for batch in tqdm(dataloader, desc=f"Processing {split_name}"):
+                    # Move to device
+                    input_ids = batch['input_ids'].to(device)
+                    attention_mask = batch['attention_mask'].to(device)
+                    emotion_labels = batch['emotion_labels'].to(device)
+                    cause_labels = batch['cause_labels'].to(device)
+                    
+                    # Forward pass
+                    outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+                    
+                    # Get predictions
+                    emotion_preds = torch.argmax(outputs['emotion_logits'], dim=-1)  # [batch_size, max_utts]
+                    cause_preds = torch.argmax(outputs['cause_logits'], dim=-1)     # [batch_size, max_utts]
+                    
+                    # Process each conversation in batch
+                    for i in range(input_ids.size(0)):
+                        conv_id = batch.get('conv_ids', [f"conv_{i}"])[i] if 'conv_ids' in batch else f"conv_{i}"
+                        emotions = batch.get('emotions', [[]])[i] if 'emotions' in batch else []
+                        emotion_cause_pairs = batch.get('emotion_cause_pairs', [[]])[i] if 'emotion_cause_pairs' in batch else []
+                        
+                        # Calculate document length (number of non-padded utterances)
+                        if len(attention_mask.shape) == 3:
+                            doc_len = (attention_mask[i].sum(dim=-1) > 0).sum().item()
+                        else:
+                            doc_len = (attention_mask[i] > 0).sum().item()
+                        
+                        # Write document header
+                        f.write(f"{conv_id} {doc_len}\n")
+                        
+                        # Write true emotion-cause pairs
+                        f.write(f"{emotion_cause_pairs}\n")
+                        
+                        # Write utterances with predictions
+                        for j in range(doc_len):
+                            emotion_pred = emotion_preds[i, j].item()
+                            cause_pred = cause_preds[i, j].item()
+                            
+                            # Get true emotion category
+                            emotion_true_idx = emotion_labels[i, j].item() if j < emotion_labels.size(1) else 0
+                            emotion_true = emotion_idx_rev.get(emotion_true_idx, 'neutral')
+                            
+                            # Get utterance text (placeholder - in real implementation this would come from dataset)
+                            utt_text = f"utterance_{j+1}_text"
+                            speaker = f"Speaker_{j%3}"  # Placeholder
+                            
+                            # Write utterance line: utt_id | emotion_pred | cause_pred | speaker | emotion_true | text
+                            f.write(f"{j+1} | {emotion_pred} | {cause_pred} | {speaker} | {emotion_true} | {utt_text}\n")
+        
+        print(f"✅ Generated {filename}")
 
 if __name__ == "__main__":
     main()

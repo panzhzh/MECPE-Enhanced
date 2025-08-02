@@ -13,28 +13,60 @@ data:
   # Text processing
   max_seq_length: 128
   max_doc_length: 75
+  max_sen_len: 35  # Max tokens per sentence for Step2
+  
+  # Step2 specific
+  pred_future_cause: true  # Whether to consider future utterances as causes
 
 # Model Configuration  
 model:
   # Text encoder (支持base/large自动维度)
   text_model: "roberta-base"  # 可选: roberta-base, roberta-large
   
-  # Multimodal fusion
-  fusion_hidden_size: 256
-  fusion_dropout: 0.1
+  # Step2 specific model architecture
+  text_embedding_dim: 300  # GloVe embedding dimension
+  position_embedding_dim: 50  # Distance and emotion category embedding
+  lstm_hidden_size: 100  # BiLSTM hidden size (becomes 200 bidirectional)
+  
+  # Multimodal features (modern encoders)
+  use_video: false  # Whether to use video features
+  use_audio: false  # Whether to use audio features  
+  freeze_encoders: true  # Whether to freeze pretrained encoder weights
+  
+  # Modern encoder specifications
+  video_model: "facebook/timesformer-base-finetuned-k400"  # TimeSformer
+  audio_model: "facebook/wav2vec2-base-960h"  # Wav2Vec2
+  
+  # Dropout rates (following original TensorFlow)
+  word_dropout: 0.5  # keep_prob1
+  final_dropout: 1.0  # keep_prob2 (no dropout)
+  video_dropout: 0.5  # keep_prob_v
+  audio_dropout: 0.5  # keep_prob_a
   
   # Task-specific
-  num_emotions: 6  # neutral, joy, sadness, anger, surprise, fear
+  num_emotions: 7  # neutral, anger, disgust, fear, joy, sadness, surprise
   num_labels: 2    # binary classification
+  use_emotion_categories: false  # Whether to use emotion categories in Step2
+  
+  # Legacy (for Step1 compatibility)
+  fusion_hidden_size: 256
+  fusion_dropout: 0.1
 
 # Training Configuration
 training:
+  # Step1 settings
   batch_size: 8 
   learning_rate: 0.00002  # 2e-5 in decimal format
   num_epochs: 10
   warmup_steps: 500
   weight_decay: 0.01
   gradient_clip_val: 1.0
+  
+  # Step2 settings (following original TensorFlow)
+  step2_batch_size: 200  # Original Step2 batch size
+  step2_learning_rate: 0.005  # Original Step2 learning rate
+  step2_num_epochs: 12  # training_iter
+  l2_reg: 0.00001  # L2 regularization (shared with Step1)
   
   # Hardware
   device: "auto"  # auto, cuda, cpu
