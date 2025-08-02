@@ -1,125 +1,66 @@
-# MECPE-Enhanced: Multimodal Emotion-Cause Pair Extraction
+# MECPE-Enhanced: PyTorch Implementation
 
-[![Dataset](https://img.shields.io/badge/Dataset-ECF_2.0-F0A336)](https://huggingface.co/datasets/NUSTM/ECF) [![Task](https://img.shields.io/badge/Task-SemEval_2024-488DF8)](https://nustm.github.io/SemEval-2024_ECAC/) [![Paper](https://img.shields.io/badge/Paper-TAFFC_2023-2E6396)](https://ieeexplore.ieee.org/document/9969873)
+## 🎯 Project Status
 
-An enhanced implementation for **Multimodal Emotion-Cause Pair Extraction in Conversations** based on the SemEval-2024 Task 3 dataset.
+**Phase 1 完成**: Successfully migrated original TensorFlow Step1 evaluation to PyTorch
 
-This project focuses on **Subtask 2: Multimodal Emotion-Cause Pair Extraction**, which analyzes emotions and their causes across text, audio, and visual modalities in conversational contexts.
+### ✅ Current Features
 
-## 🎯 Task Overview
+- **PyTorch实现**: 完整的MECPE Step1话语级别评估系统
+- **双重评估**: Step1 metrics (情感/原因话语识别) + CodaLab metrics (情感-原因对识别)
+- **多模态支持**: 文本、音频、视频数据处理 (当前仅文本已测试)
+- **完整数据流**: 从ECF数据集到模型训练的完整pipeline
 
-Given a multimodal conversation from the TV show *Friends*, the goal is to:
-1. **Identify emotion utterances** and their emotion categories
-2. **Extract cause utterances** that trigger these emotions  
-3. **Pair emotions with their corresponding causes** across all modalities
+### 🏗️ Architecture
 
-**Example**: If character Phoebe shows *disgust* in utterance U5 because Monica and Chandler are kissing (visible in the video), the model should extract the pair `(U5_Disgust, U5)`. 
+```
+src/
+├── data/dataset.py          # ECF数据集加载和预处理
+├── models/baseline_model.py # BERT/BiLSTM基线模型
+├── evaluation/
+│   ├── step1_metrics.py     # Step1话语级别评估 (移植自TensorFlow)
+│   ├── codalab_metrics.py   # 官方CodaLab对级别评估
+│   └── metrics.py           # 统一评估接口
+└── utils/config.py          # 配置管理
+```
 
-## 📊 Dataset
+### 🚀 Quick Start
 
-**ECF 2.0 (Emotion-Cause-in-Friends)**: A multimodal conversational dataset from the TV show *Friends*
-
-| Split | Conversations | Utterances | Emotion-Cause Pairs |
-|-------|---------------|------------|---------------------|
-| Train | 1,374 | 13,619 | ~9,800 |  
-| Test | 341 | 3,101 | ~2,500 |
-
-**Modalities**:
-- **Text**: Conversational utterances with speaker information
-- **Audio**: 6,373-dimensional acoustic features (openSMILE)
-- **Visual**: 4,096-dimensional visual features (3D-CNN)
-
-**Emotions**: 6 categories - *anger, disgust, fear, joy, sadness, surprise*
-
-❗️ **Data is for research purposes only**
-
-## 🚀 Quick Start
-
-### Prerequisites
 ```bash
-# Python environment
-Python 3.6+ 
-TensorFlow 1.15.4
+# 训练基线模型
+python scripts/train_baseline.py
+
+# 输出示例:
+# Test Step1 Emotion F1: 0.7736  (情感话语识别F1)
+# Test Step1 Cause F1: 0.7251    (原因话语识别F1)  
+# Test CodaLab Weighted F1: 0.2493 (情感-原因对F1)
 ```
 
-### Installation  
-```bash
-git clone https://github.com/yourusername/MECPE-Enhanced
-cd MECPE-Enhanced
-pip install -r requirements.txt
-```
+### 📊 Key Metrics
 
-### Download Pre-extracted Features
-The multimodal features are available at:
-- [Audio Features (662MB)](https://drive.google.com/file/d/1EhU2jFSr_Vi67Wdu1ARJozrTJtgiQrQI/view) → `data/features/audio_embedding_6373.npy`
-- [Video Features (426MB)](https://drive.google.com/file/d/1NGSsiQYDTqgen_g9qndSuha29JA60x14/view) → `data/features/video_embedding_4096.npy`
+- **F1emotion**: 情感话语识别F1分数
+- **F1cause**: 原因话语识别F1分数  
+- **F1pair**: 情感-原因对识别F1分数
 
-### Usage
+### 🔧 Configuration
 
-**Step 1: Emotion & Cause Recognition**
-```bash
-# BiLSTM + Multimodal
-python step1.py --use_x_a yes --use_x_v yes --scope BiLSTM_A_V
+编辑 `configs/base_config.yaml` 调整模型和训练参数。
 
-# BERT + Multimodal  
-python step1.py --model_type BERTcased --use_x_a yes --use_x_v yes --scope BERT_A_V
-```
+### 📝 Data Format
 
-**Step 2: Emotion-Cause Pairing**
-```bash
-python step2.py --use_x_a yes --use_x_v yes --scope BiLSTM_A_V
-```
+项目使用ECF (Emotion-Cause in Friends)数据集，包含:
+- 对话文本数据
+- 情感标签 (7类: neutral, anger, disgust, fear, joy, sadness, surprise)
+- 原因标签 (二分类: cause/non-cause)
+- 情感-原因对标注
 
-## 📁 Project Structure
+## 🎯 Next Steps
 
-```
-MECPE-Enhanced/
-├── step1.py              # Stage 1: Emotion & Cause Recognition
-├── step2.py              # Stage 2: Emotion-Cause Pairing  
-├── bert/                 # BERT model components
-├── utils/                # Utility functions
-├── data/
-│   ├── Subtask_2_train.json    # Training data (SemEval-2024)
-│   ├── Subtask_2_test.json     # Test data (SemEval-2024)
-│   ├── features/
-│   │   ├── audio_embedding_6373.npy  # Audio features
-│   │   └── video_embedding_4096.npy  # Video features
-│   └── [ECF 1.0 data files...]
-└── CodaLab/evaluation/   # Official evaluation scripts
-```
+- [ ] Step2 implementation (情感-原因对提取)
+- [ ] 音频和视频模态集成
+- [ ] 完整的多模态评估框架
+- [ ] 超参数优化
 
-## 🏆 Performance
+---
 
-Evaluation metrics: **Weighted Average F1** across 6 emotion categories
-
-| Model | Text | +Audio | +Video | +Both |
-|-------|------|--------|--------|-------|
-| BiLSTM | 0.xxx | 0.xxx | 0.xxx | 0.xxx |
-| BERT | 0.xxx | 0.xxx | 0.xxx | 0.xxx |
-
-## 📚 Citation
-
-```bibtex
-@article{wang2023multimodal,
-  title={Multimodal Emotion-Cause Pair Extraction in Conversations},
-  author={Wang, Fanfan and Ding, Zixiang and Xia, Rui and Li, Zhaoyu and Yu, Jianfei},
-  journal={IEEE Transactions on Affective Computing},
-  volume={14}, number={3}, pages={1832--1844}, year={2023}
-}
-
-@inproceedings{wang2024semeval,
-  title={SemEval-2024 Task 3: Multimodal Emotion Cause Analysis in Conversations},
-  author={Wang, Fanfan and Ma, Heqing and Xia, Rui and Yu, Jianfei and Cambria, Erik},
-  booktitle={Proceedings of SemEval-2024}, 
-  pages={2022--2033}, year={2024}
-}
-```
-
-## 📄 License
-
-This project is licensed under GPL-3.0 - see the [LICENSE](LICENSE.txt) file for details.
-
-## 👥 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-# MECPE-Enhanced
+**里程碑**: 成功完成TensorFlow到PyTorch的Step1评估系统迁移 ✨
