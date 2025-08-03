@@ -94,9 +94,12 @@ def evaluate_pair_full(model, dataloader, device, config):
     
     # Use proper pair-level metrics
     metrics = PairLevelMetrics()
+    batch_count = 0
     
     with torch.no_grad():
         for batch in tqdm(dataloader, desc="Full Evaluation"):
+            batch_count += 1
+            
             # Move to device
             input_ids = batch['input_ids'].to(device)
             attention_mask = batch['attention_mask'].to(device)
@@ -127,8 +130,9 @@ def evaluate_pair_full(model, dataloader, device, config):
             # Get predictions
             predictions = torch.argmax(logits, dim=-1).cpu().numpy()
             
-            # Group by document and update metrics
-            doc_data = {}  # doc_id -> {predicted_pairs: [], true_pairs: []}
+            
+            # Group by document and update metrics for THIS batch
+            doc_data = {}  # Reset for each batch - this is correct per-batch processing
             
             for i, pair_id in enumerate(batch['pair_ids']):
                 doc_id, emo_utt, cause_utt, emotion_cat = pair_id
@@ -144,7 +148,7 @@ def evaluate_pair_full(model, dataloader, device, config):
                 if labels[i].item() == 1:
                     doc_data[doc_id]['true_pairs'].append((emo_utt, cause_utt, emotion_cat))
             
-            # Update metrics for each document
+            # Update metrics for each document in this batch
             for doc_id, data in doc_data.items():
                 metrics.update(
                     loss=loss.item() / len(doc_data),  # Distribute loss across documents in batch
@@ -241,20 +245,33 @@ def main():
         dev_metrics = evaluate_pair_full(model, dev_loader, device, config)
         
         # Print main metrics using correct keys from PairLevelMetrics
-        if config.model.use_emotion_categories:
-            main_f1 = dev_metrics.get('weighted_f1', 0.0)
-            print(f"Dev Weighted F1: {main_f1:.4f}")
-            print(f"Dev Weighted Precision: {dev_metrics.get('weighted_precision', 0.0):.4f}")
-            print(f"Dev Weighted Recall: {dev_metrics.get('weighted_recall', 0.0):.4f}")
-        else:
-            main_f1 = dev_metrics.get('pair_f1', 0.0)
-            print(f"Dev Pair F1: {main_f1:.4f}")
-            print(f"Dev Pair Precision: {dev_metrics.get('pair_precision', 0.0):.4f}")
-            print(f"Dev Pair Recall: {dev_metrics.get('pair_recall', 0.0):.4f}")
+        # Use weighted F1 as main metric (following CodaLab standards)
+        main_f1 = dev_metrics.get('weighted_f1', 0.0)
+        micro_f1 = dev_metrics.get('pair_f1', 0.0)
+        
+        print(f"Dev W-Avg F1: {main_f1:.4f} (Main Metric)")
+        print(f"Dev W-Avg Precision: {dev_metrics.get('weighted_precision', 0.0):.4f}")
+        print(f"Dev W-Avg Recall: {dev_metrics.get('weighted_recall', 0.0):.4f}")
+        print(f"Dev Micro F1: {micro_f1:.4f}")
+        print(f"Dev Micro Precision: {dev_metrics.get('pair_precision', 0.0):.4f}")
+        print(f"Dev Micro Recall: {dev_metrics.get('pair_recall', 0.0):.4f}")
         
         # Debug information
         print(f"Predicted/True/Correct pairs: {dev_metrics.get('num_predicted_pairs', 0)}/{dev_metrics.get('num_true_pairs', 0)}/{dev_metrics.get('num_correct_pairs', 0)}")
         print(f"Documents processed: {dev_metrics.get('num_documents', 0)}")
+        
+        # Also evaluate on test set for monitoring (but don't use for model selection)
+        print("Evaluating on test set...")
+        test_metrics = evaluate_pair_full(model, test_loader, device, config)
+        test_main_f1 = test_metrics.get('weighted_f1', 0.0)
+        test_micro_f1 = test_metrics.get('pair_f1', 0.0)
+        
+        print(f"Test W-Avg F1: {test_main_f1:.4f}")
+        print(f"Test W-Avg Precision: {test_metrics.get('weighted_precision', 0.0):.4f}")
+        print(f"Test W-Avg Recall: {test_metrics.get('weighted_recall', 0.0):.4f}")
+        print(f"Test Micro F1: {test_micro_f1:.4f}")
+        print(f"Test Micro Precision: {test_metrics.get('pair_precision', 0.0):.4f}")
+        print(f"Test Micro Recall: {test_metrics.get('pair_recall', 0.0):.4f}")
         
         # Save best model
         if main_f1 > best_f1:
@@ -265,32 +282,33 @@ def main():
             model_save_path = os.path.join(config.training.save_dir, 'best_pair_model.pt')
             os.makedirs(os.path.dirname(model_save_path), exist_ok=True)
             torch.save(model.state_dict(), model_save_path)
-            print(f"💾 Saved new best model (F1: {best_f1:.4f})")
+            print(f"💾 Saved new best model (W-Avg F1: {best_f1:.4f})")
         
         epoch_time = time.time() - start_time
         print(f"Epoch time: {epoch_time:.1f}s")
     
     print(f"\n🎉 Training completed!")
-    print(f"Best Dev F1: {best_f1:.4f} (Epoch {best_epoch})")
+    print(f"Best Dev W-Avg F1: {best_f1:.4f} (Epoch {best_epoch})")
     
-    # Final evaluation on test set
+    # Final evaluation on test set with best model
     if best_f1 > 0:
-        print("\n📊 Final evaluation on test set...")
+        print("\n📊 Final evaluation on test set with best model...")
         # Load best model
         model_save_path = os.path.join(config.training.save_dir, 'best_pair_model.pt')
         model.load_state_dict(torch.load(model_save_path))
         
-        test_metrics = evaluate_pair_full(model, test_loader, device, config)
+        final_test_metrics = evaluate_pair_full(model, test_loader, device, config)
         
-        if config.model.use_emotion_categories:
-            test_f1 = test_metrics.get('filtered_weighted_f1', 0.0)
-            print(f"Test Weighted F1: {test_f1:.4f}")
-            print(f"Test 4-class F1: {test_metrics.get('filtered_weighted_f1_4class', 0.0):.4f}")
-        else:
-            test_f1 = test_metrics.get('pair_f1', 0.0)
-            print(f"Test F1: {test_f1:.4f}")
-            print(f"Test Precision: {test_metrics.get('pair_precision', 0.0):.4f}")
-            print(f"Test Recall: {test_metrics.get('pair_recall', 0.0):.4f}")
+        final_weighted_f1 = final_test_metrics.get('weighted_f1', 0.0)
+        final_micro_f1 = final_test_metrics.get('pair_f1', 0.0)
+        
+        print(f"Final Test W-Avg F1: {final_weighted_f1:.4f}")
+        print(f"Final Test W-Avg Precision: {final_test_metrics.get('weighted_precision', 0.0):.4f}")
+        print(f"Final Test W-Avg Recall: {final_test_metrics.get('weighted_recall', 0.0):.4f}")
+        print(f"Final Test Micro F1: {final_micro_f1:.4f}")
+        print(f"Final Test Micro Precision: {final_test_metrics.get('pair_precision', 0.0):.4f}")
+        print(f"Final Test Micro Recall: {final_test_metrics.get('pair_recall', 0.0):.4f}")
+        print(f"Final Test Predicted/True/Correct pairs: {final_test_metrics.get('num_predicted_pairs', 0)}/{final_test_metrics.get('num_true_pairs', 0)}/{final_test_metrics.get('num_correct_pairs', 0)}")
 
 if __name__ == "__main__":
     main()

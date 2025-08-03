@@ -15,52 +15,48 @@ EMOTION_IDX = {
 def cal_prf_pair_emocate(true_pairs: List[Tuple], pred_pairs: List[Tuple]) -> List[float]:
     """
     Calculate precision, recall, F1 for emotion-cause pairs (Subtask 2 evaluation)
-    Following the official CodaLab evaluation implementation
+    EXACT implementation of official CodaLab evaluation (evaluate.py:260-285)
     
     Args:
         true_pairs: List of (conv_id, emo_utt_id, cause_utt_id, emotion_category)
         pred_pairs: List of (conv_id, emo_utt_id, cause_utt_id, emotion_category)
     
     Returns:
-        [micro_p, micro_r, micro_f1, weighted_p, weighted_r, weighted_f1]
+        [micro_p, micro_r, micro_f1, w_avg_p, w_avg_r, w_avg_f1]
     """
     conf_mat = np.zeros([7, 7])  # 7 emotion categories
     
-    # Convert to sets for efficient lookup
-    true_pairs_set = set(true_pairs)
-    
+    # Process predicted pairs (line 262-266 in original)
     for p in pred_pairs:
-        if p in true_pairs_set:
-            emotion_cat = p[3]
-            conf_mat[emotion_cat][emotion_cat] += 1
-            true_pairs_set.remove(p)  # Remove matched pair
+        if p in true_pairs:
+            conf_mat[p[3]][p[3]] += 1  # p[3] is emotion_category
         else:
-            emotion_cat = p[3]
-            conf_mat[0][emotion_cat] += 1  # False positive
+            conf_mat[0][p[3]] += 1  # False positive
     
-    # Add false negatives (remaining true pairs)
-    for p in true_pairs_set:
-        emotion_cat = p[3]
-        conf_mat[emotion_cat][0] += 1
+    # Process true pairs for false negatives (line 267-269 in original)
+    for p in true_pairs:
+        if p not in pred_pairs:
+            conf_mat[p[3]][0] += 1  # False negative
     
-    # Calculate precision, recall, F1 (following official implementation)
-    p = np.diagonal(conf_mat / (np.reshape(np.sum(conf_mat, axis=0) + (1e-8), [1, 7])))
-    r = np.diagonal(conf_mat / (np.reshape(np.sum(conf_mat, axis=1) + (1e-8), [7, 1])))
+    # Calculate precision, recall, F1 (line 270-277 in original)
+    p = np.diagonal(conf_mat / np.reshape(np.sum(conf_mat, axis=0) + (1e-8), [1, 7]))
+    r = np.diagonal(conf_mat / np.reshape(np.sum(conf_mat, axis=1) + (1e-8), [7, 1]))
     f = 2 * p * r / (p + r + (1e-8))
     
     # Weighted average (exclude neutral class - index 0)
     weight0 = np.sum(conf_mat, axis=1)
-    weight = weight0[1:] / (np.sum(weight0[1:]) + 1e-8)
+    weight = weight0[1:] / np.sum(weight0[1:])  # Original doesn't add 1e-8 here
     w_avg_p = np.sum(p[1:] * weight)
     w_avg_r = np.sum(r[1:] * weight)
     w_avg_f1 = np.sum(f[1:] * weight)
     
-    # Micro average
+    # Micro average (line 279-282 in original)
     micro_acc = np.sum(np.diagonal(conf_mat)[1:])
-    micro_p = micro_acc / (np.sum(np.sum(conf_mat, axis=0)[1:]) + (1e-8))
-    micro_r = micro_acc / (np.sum(np.sum(conf_mat, axis=1)[1:]) + (1e-8))
+    micro_p = micro_acc / (sum(np.sum(conf_mat, axis=0)[1:]) + (1e-8))
+    micro_r = micro_acc / (sum(np.sum(conf_mat, axis=1)[1:]) + (1e-8))
     micro_f1 = 2 * micro_p * micro_r / (micro_p + micro_r + 1e-8)
     
+    # Return in official order (line 284)
     return [micro_p, micro_r, micro_f1, w_avg_p, w_avg_r, w_avg_f1]
 
 def convert_predictions_to_pairs(batch_data: Dict) -> Tuple[List[Tuple], List[Tuple]]:

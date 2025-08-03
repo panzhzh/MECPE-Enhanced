@@ -78,15 +78,21 @@ def main():
     # Create datasets
     print("\n📊 Loading datasets...")
     train_dataset = ECFDataset(split="train", config=config, load_video=False, load_audio=False)
+    dev_dataset = ECFDataset(split="dev", config=config, load_video=False, load_audio=False)
     test_dataset = ECFDataset(split="test", config=config, load_video=False, load_audio=False)
     
     print(f"Train: {len(train_dataset)} samples")
+    print(f"Dev: {len(dev_dataset)} samples")
     print(f"Test: {len(test_dataset)} samples")
     
     # Create dataloaders
     train_loader = DataLoader(
         train_dataset, batch_size=config.training.batch_size, 
         shuffle=True, collate_fn=collate_conversations
+    )
+    dev_loader = DataLoader(
+        dev_dataset, batch_size=config.training.batch_size,
+        shuffle=False, collate_fn=collate_conversations
     )
     test_loader = DataLoader(
         test_dataset, batch_size=config.training.batch_size,
@@ -110,6 +116,7 @@ def main():
     print(f"\n🎯 Training for {config.training.num_epochs} epochs...")
     
     best_f1 = 0.0
+    best_epoch = 0
     
     for epoch in range(config.training.num_epochs):
         print(f"\n=== Epoch {epoch + 1}/{config.training.num_epochs} ===")
@@ -117,30 +124,46 @@ def main():
         # Training
         train_metrics = run_epoch(model, train_loader, optimizer, device, is_train=True)
         print(f"Train Loss: {train_metrics['avg_loss']:.4f}")
-        
-        # Print conversation-level metrics
         print(f"Train Emotion F1: {train_metrics['emotion_f1']:.4f}")
         print(f"Train Cause F1: {train_metrics['cause_f1']:.4f}")
         print(f"Train Avg F1: {train_metrics['avg_f1']:.4f}")
         
-        # Test evaluation
+        # Dev evaluation (for model selection)
+        dev_metrics = run_epoch(model, dev_loader, device=device, is_train=False)
+        print(f"Dev Loss: {dev_metrics['avg_loss']:.4f}")
+        print(f"Dev Emotion F1: {dev_metrics['emotion_f1']:.4f}")
+        print(f"Dev Cause F1: {dev_metrics['cause_f1']:.4f}")
+        print(f"Dev Avg F1: {dev_metrics['avg_f1']:.4f}")
+        
+        # Test evaluation (for monitoring only)
         test_metrics = run_epoch(model, test_loader, device=device, is_train=False)
         print(f"Test Loss: {test_metrics['avg_loss']:.4f}")
-        
-        # Print conversation-level metrics
         print(f"Test Emotion F1: {test_metrics['emotion_f1']:.4f}")
         print(f"Test Cause F1: {test_metrics['cause_f1']:.4f}")
         print(f"Test Avg F1: {test_metrics['avg_f1']:.4f}")
         
-        # Save best model based on conversation-level avg F1
-        main_metric = test_metrics['avg_f1']
+        # Save best model based on dev avg F1
+        main_metric = dev_metrics['avg_f1']
         if main_metric > best_f1:
             best_f1 = main_metric
+            best_epoch = epoch + 1
             torch.save(model.state_dict(), 
                       os.path.join(config.training.save_dir, 'best_model.pt'))
-            print(f"💾 Saved new best model (F1: {best_f1:.4f})")
+            print(f"💾 Saved new best model (Dev Avg F1: {best_f1:.4f})")
     
-    print(f"\n🎉 Training completed! Best Test F1: {best_f1:.4f}")
+    print(f"\n🎉 Training completed! Best Dev Avg F1: {best_f1:.4f} (Epoch {best_epoch})")
+    
+    # Final evaluation on test set with best model
+    if best_f1 > 0:
+        print("\n📊 Final evaluation on test set with best model...")
+        # Load best model
+        model.load_state_dict(torch.load(os.path.join(config.training.save_dir, 'best_model.pt')))
+        
+        final_test_metrics = run_epoch(model, test_loader, device=device, is_train=False)
+        print(f"Final Test Loss: {final_test_metrics['avg_loss']:.4f}")
+        print(f"Final Test Emotion F1: {final_test_metrics['emotion_f1']:.4f}")
+        print(f"Final Test Cause F1: {final_test_metrics['cause_f1']:.4f}")
+        print(f"Final Test Avg F1: {final_test_metrics['avg_f1']:.4f}")
     
     # Generate Step2 input files from best model predictions
     print("\n📝 Generating Step2 input files...")
