@@ -248,7 +248,7 @@ class ECFDataset(Dataset):
             return_tensors="pt"
         )
         
-        # Prepare labels for Step1 (emotion/cause recognition)
+        # Prepare labels for Conv (emotion/cause recognition)
         emotion_labels = []
         cause_labels = []
         

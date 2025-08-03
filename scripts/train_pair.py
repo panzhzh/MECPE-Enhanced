@@ -16,7 +16,8 @@ import time
 from src.utils.config import Config
 from src.data.pair_dataset import create_pair_datasets, collate_pair_samples
 from src.models.pair_model import create_pair_model
-from src.evaluation.pair_level_metrics import PairLevelMetrics
+from src.models.conv_model import create_conv_model
+from src.evaluation.end_to_end_metrics import EndToEndMetrics, evaluate_end_to_end_full
 
 def run_epoch(model, dataloader, optimizer=None, device='cpu', is_train=True, config=None):
     """Run one epoch (train or eval)"""
@@ -86,83 +87,17 @@ def run_epoch(model, dataloader, optimizer=None, device='cpu', is_train=True, co
         'accuracy': accuracy
     }
 
-def evaluate_pair_full(model, dataloader, device, config):
+def evaluate_pair_full(model, dataloader, device, config, conv_model=None):
     """
-    Full Pair evaluation using proper pair-level metrics
+    端到端评估：使用conv模型预测和pair模型来进行真正的端到端评估
+    注意：目前这是一个过渡实现，未来需要完全重构为真正的端到端
     """
-    model.eval()
+    # 如果没有提供conv_model，使用原有的简化评估逻辑
+    if conv_model is None:
+        return evaluate_end_to_end_full(None, model, dataloader, device, config)
     
-    # Use proper pair-level metrics
-    metrics = PairLevelMetrics()
-    batch_count = 0
-    
-    with torch.no_grad():
-        for batch in tqdm(dataloader, desc="Full Evaluation"):
-            batch_count += 1
-            
-            # Move to device
-            input_ids = batch['input_ids'].to(device)
-            attention_mask = batch['attention_mask'].to(device)
-            distance = batch['distance'].to(device)
-            labels = batch['labels'].to(device)
-            
-            # Optional emotion category
-            emotion_category = None
-            if 'emotion_category' in batch:
-                emotion_category = batch['emotion_category'].to(device)
-            
-            # Forward pass
-            logits = model(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                distance=distance,
-                emotion_category=emotion_category
-            )
-            
-            # Compute loss
-            batch_size = labels.size(0)
-            labels_onehot = torch.zeros(batch_size, 2, device=device)
-            labels_onehot.scatter_(1, labels.unsqueeze(1), 1)
-            
-            loss_dict = model.compute_loss(logits, labels_onehot)
-            loss = loss_dict['total_loss']
-            
-            # Get predictions
-            predictions = torch.argmax(logits, dim=-1).cpu().numpy()
-            
-            
-            # Group by document and update metrics for THIS batch
-            doc_data = {}  # Reset for each batch - this is correct per-batch processing
-            
-            for i, pair_id in enumerate(batch['pair_ids']):
-                doc_id, emo_utt, cause_utt, true_emotion_cat = pair_id  # true_emotion_cat仅用于构建true_pairs
-                
-                # 方案2：使用conv模型的预测emotion，而不是真实emotion_cat
-                conv_predicted_emotion = batch['conv_predicted_emotions'][i]
-                
-                if doc_id not in doc_data:
-                    doc_data[doc_id] = {'predicted_pairs': [], 'true_pairs': []}
-                
-                # Add prediction if model predicts this is a true pair
-                # 关键修复：使用conv模型预测的emotion，而不是真实的emotion_cat
-                if predictions[i] == 1:
-                    doc_data[doc_id]['predicted_pairs'].append((emo_utt, cause_utt, conv_predicted_emotion))
-                
-                # Add true pair if label is 1 (用真实emotion用于评估对比)
-                if labels[i].item() == 1:
-                    doc_data[doc_id]['true_pairs'].append((emo_utt, cause_utt, true_emotion_cat))
-            
-            # Update metrics for each document in this batch
-            for doc_id, data in doc_data.items():
-                metrics.update(
-                    loss=loss.item() / len(doc_data),  # Distribute loss across documents in batch
-                    doc_id=doc_id,
-                    pair_predictions=data['predicted_pairs'],
-                    true_pairs=data['true_pairs']
-                )
-    
-    # Compute and return final metrics
-    return metrics.compute()
+    # 真正的端到端评估（未来实现）
+    return evaluate_end_to_end_full(conv_model, model, dataloader, device, config)
 
 def main():
     """Main Pair training function"""
@@ -184,7 +119,7 @@ def main():
         train_dataset, dev_dataset, test_dataset = create_pair_datasets(config, tokenizer)
     except FileNotFoundError as e:
         print(f"❌ Error: {e}")
-        print("💡 Please run Step1 training first to generate the required prediction files.")
+        print("💡 Please run Conv training first to generate the required prediction files.")
         return
     
     print(f"Train: {len(train_dataset)} pairs")
@@ -230,6 +165,19 @@ def main():
         weight_decay=config.training.l2_reg
     )
     
+    # Load Conv Model for E2E evaluation
+    print("\n🧠 Loading Conv model for evaluation...")
+    conv_model = create_conv_model(config)
+    conv_model_path = os.path.join(config.training.save_dir, 'best_conv_model.pt')
+    if not os.path.exists(conv_model_path):
+        print(f"❌ Error: `conv_model` not found at {conv_model_path}")
+        return
+    conv_model.load_state_dict(torch.load(conv_model_path, map_location=device))
+    conv_model.to(device)
+    conv_model.to(device)
+    conv_model.eval()
+    print("✅ `conv_model` loaded.")
+
     # Training loop
     print(f"\n🎯 Training for {config.training.pair_num_epochs} epochs...")
     
@@ -246,7 +194,7 @@ def main():
         
         # Evaluation on dev set
         print("Evaluating on dev set...")
-        dev_metrics = evaluate_pair_full(model, dev_loader, device, config)
+        dev_metrics = evaluate_pair_full(model, dev_loader, device, config, conv_model) # Pass both models
         
         # Print main metrics using correct keys from PairLevelMetrics
         # Use weighted F1 as main metric (following CodaLab standards)
@@ -266,7 +214,7 @@ def main():
         
         # Also evaluate on test set for monitoring (but don't use for model selection)
         print("Evaluating on test set...")
-        test_metrics = evaluate_pair_full(model, test_loader, device, config)
+        test_metrics = evaluate_pair_full(model, test_loader, device, config, conv_model)
         test_main_f1 = test_metrics.get('weighted_f1', 0.0)
         test_micro_f1 = test_metrics.get('pair_f1', 0.0)
         
@@ -301,7 +249,7 @@ def main():
         model_save_path = os.path.join(config.training.save_dir, 'best_pair_model.pt')
         model.load_state_dict(torch.load(model_save_path))
         
-        final_test_metrics = evaluate_pair_full(model, test_loader, device, config)
+        final_test_metrics = evaluate_pair_full(model, test_loader, device, config, conv_model)
         
         final_weighted_f1 = final_test_metrics.get('weighted_f1', 0.0)
         final_micro_f1 = final_test_metrics.get('pair_f1', 0.0)

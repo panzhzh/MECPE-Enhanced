@@ -1,5 +1,5 @@
 """
-Simple baseline training script for MECPE
+Conversation-level training script for MECPE
 Clean and minimal implementation
 """
 import sys
@@ -12,8 +12,8 @@ from tqdm import tqdm
 
 from src.utils.config import Config
 from src.data.conv_dataset import ECFDataset, collate_conversations
-from src.models.conv_model import create_baseline_model
-from src.evaluation.conv_metrics import Step1Metrics
+from src.models.conv_model import create_conv_model
+from src.evaluation.conv_metrics import ConvMetrics
 
 def run_epoch(model, dataloader, optimizer=None, device='cpu', is_train=True):
     """Run one epoch (train or eval)"""
@@ -22,7 +22,7 @@ def run_epoch(model, dataloader, optimizer=None, device='cpu', is_train=True):
     else:
         model.eval()
     
-    metrics = Step1Metrics()
+    metrics = ConvMetrics()
     
     with torch.set_grad_enabled(is_train):
         for batch in tqdm(dataloader, desc="Training" if is_train else "Evaluating"):
@@ -67,7 +67,7 @@ def run_epoch(model, dataloader, optimizer=None, device='cpu', is_train=True):
 
 def main():
     """Main training function"""
-    print("🚀 Starting Simple Baseline Training...")
+    print("🚀 Starting Conversation-level Training...")
     
     # Load config
     config = Config("configs/base_config.yaml")
@@ -101,7 +101,7 @@ def main():
     
     # Create model
     print("\n🧠 Creating model...")
-    model = create_baseline_model(config)
+    model = create_conv_model(config)
     device = torch.device(config.training.device)
     model.to(device)
     
@@ -148,7 +148,7 @@ def main():
             best_f1 = main_metric
             best_epoch = epoch + 1
             torch.save(model.state_dict(), 
-                      os.path.join(config.training.save_dir, 'best_model.pt'))
+                      os.path.join(config.training.save_dir, 'best_conv_model.pt'))
             print(f"💾 Saved new best model (Dev Avg F1: {best_f1:.4f})")
     
     print(f"\n🎉 Training completed! Best Dev Avg F1: {best_f1:.4f} (Epoch {best_epoch})")
@@ -157,7 +157,7 @@ def main():
     if best_f1 > 0:
         print("\n📊 Final evaluation on test set with best model...")
         # Load best model
-        model.load_state_dict(torch.load(os.path.join(config.training.save_dir, 'best_model.pt')))
+        model.load_state_dict(torch.load(os.path.join(config.training.save_dir, 'best_conv_model.pt')))
         
         final_test_metrics = run_epoch(model, test_loader, device=device, is_train=False)
         print(f"Final Test Loss: {final_test_metrics['avg_loss']:.4f}")
@@ -170,11 +170,11 @@ def main():
     generate_step2_input_files(model, train_loader, dev_loader, test_loader, config, device)
 
 def generate_step2_input_files(model, train_loader, dev_loader, test_loader, config, device):
-    """Generate Step2 input files from Step1 predictions"""
+    """Generate Step2 input files from Conv predictions"""
     model.eval()
     
     # Create output directory
-    step2_input_dir = os.path.join(config.training.save_dir, "step1_results")
+    step2_input_dir = os.path.join(config.training.save_dir, "conv_results")
     os.makedirs(step2_input_dir, exist_ok=True)
     
     # Process each dataset

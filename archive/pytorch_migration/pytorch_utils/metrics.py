@@ -218,7 +218,7 @@ def print_metrics(metrics, prefix="", choose_emocate=False):
 
 def format_results_for_step2(predictions, doc_ids, true_pairs):
     """
-    格式化Step1的结果供Step2使用
+    格式化Conv的结果供Step2使用
     """
     # 这里需要根据具体需求实现
     # 将预测结果转换为Step2可以使用的格式

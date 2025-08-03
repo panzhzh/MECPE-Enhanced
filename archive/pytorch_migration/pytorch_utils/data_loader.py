@@ -16,20 +16,20 @@ class ECFDataset(Dataset):
     """MECPE数据集类"""
     
     def __init__(self, data_file: str, tokenizer, word_idx: Dict, video_idx: Dict, 
-                 spe_idx: Dict, is_step1: bool = True):
-        self.is_step1 = is_step1
+                 spe_idx: Dict, is_conv: bool = True):
+        self.is_conv = is_conv
         self.tokenizer = tokenizer
         self.word_idx = word_idx
         self.video_idx = video_idx
         self.spe_idx = spe_idx
         
-        if is_step1:
-            self.data = self._load_step1_data(data_file)
+        if is_conv:
+            self.data = self._load_conv_data(data_file)
         else:
             self.data = self._load_step2_data(data_file)
     
-    def _load_step1_data(self, data_file):
-        """加载Step1数据（情感和原因识别）"""
+    def _load_conv_data(self, data_file):
+        """加载Conv数据（情感和原因识别）"""
         data = []
         with open(data_file, 'r', encoding='utf-8') as f:
             lines = f.readlines()
@@ -111,7 +111,7 @@ class ECFDataset(Dataset):
             
             if utterances:  # 只有有效的样本才添加
                 # 转换为模型输入格式
-                sample = self._process_step1_sample(
+                sample = self._process_conv_sample(
                     doc_id, utterances, emotions, causes, speakers, video_ids, true_pairs
                 )
                 data.append(sample)
@@ -119,9 +119,9 @@ class ECFDataset(Dataset):
         
         return data
     
-    def _process_step1_sample(self, doc_id, utterances, emotions, causes, 
+    def _process_conv_sample(self, doc_id, utterances, emotions, causes, 
                              speakers, video_ids, true_pairs):
-        """处理Step1样本"""
+        """处理Conv样本"""
         # 文本编码
         if FLAGS.model_type == 'BiLSTM':
             # 使用词汇表编码
@@ -212,17 +212,17 @@ class ECFDataset(Dataset):
     
     def _load_step2_data(self, data_file):
         """加载Step2数据（情感-原因配对）"""
-        # 临时实现：基于Step1格式生成Step2数据
-        # 在实际应用中，应该使用Step1的预测结果
+        # 临时实现：基于Conv格式生成Step2数据
+        # 在实际应用中，应该使用Conv的预测结果
         data = []
         
-        # 首先加载原始数据（和Step1相同）
-        step1_data = self._load_step1_data(data_file)
+        # 首先加载原始数据（和Conv相同）
+        conv_data = self._load_conv_data(data_file)
         
         # 转换为Step2格式
-        for sample in step1_data:
+        for sample in conv_data:
             doc_id = sample['doc_id']
-            # 模拟Step1预测结果（这里使用真实标签作为"预测"）
+            # 模拟Conv预测结果（这里使用真实标签作为"预测"）
             pred_emotions = sample['emotions'].clone()
             pred_causes = sample['causes'].clone()
             
@@ -486,11 +486,11 @@ def collate_fn(batch):
     """批处理函数 - 处理变长序列"""
     batch_data = {}
     
-    # 检查是否是Step1数据（有doc_len字段）
-    is_step1 = 'doc_len' in batch[0]
+    # 检查是否是Conv数据（有doc_len字段）
+    is_conv = 'doc_len' in batch[0]
     
-    if is_step1:
-        # Step1数据处理 - 使用配置的最大文档长度确保一致性
+    if is_conv:
+        # Conv数据处理 - 使用配置的最大文档长度确保一致性
         max_doc_len = FLAGS.max_doc_len
         
         for key in batch[0].keys():

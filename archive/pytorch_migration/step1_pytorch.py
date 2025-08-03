@@ -1,6 +1,6 @@
 """
-PyTorch版本的Step1: 情感和原因识别
-替代原TensorFlow版本的step1.py
+PyTorch版本的Conv: 情感和原因识别
+替代原TensorFlow版本的conv.py
 """
 import os
 import sys
@@ -28,7 +28,7 @@ from pytorch_utils.metrics import calculate_prf, calculate_prf_emocate
 
 def parse_args():
     """解析命令行参数"""
-    parser = argparse.ArgumentParser(description='MECPE Step1 - PyTorch Version')
+    parser = argparse.ArgumentParser(description='MECPE Conv - PyTorch Version')
     
     # 模型参数
     parser.add_argument('--model_type', default='BiLSTM', choices=['BiLSTM', 'BERT'],
@@ -292,7 +292,7 @@ def evaluate(model, dataloader, criterion, device, desc="Evaluating"):
 def save_results(log_dir, run_id, predictions, datasets, embeddings_dict):
     """保存预测结果"""
     # 创建结果目录
-    results_dir = os.path.join(log_dir, 'step1')
+    results_dir = os.path.join(log_dir, 'conv')
     os.makedirs(results_dir, exist_ok=True)
     
     # 保存预测结果文件
@@ -342,19 +342,19 @@ def main():
     train_dataset = ECFDataset(
         os.path.join(FLAGS.data_path, 'train.txt'),
         tokenizer, embeddings_dict['word_idx'], 
-        embeddings_dict['video_idx'], spe_idx, is_step1=True
+        embeddings_dict['video_idx'], spe_idx, is_conv=True
     )
     
     dev_dataset = ECFDataset(
         os.path.join(FLAGS.data_path, 'dev.txt'),
         tokenizer, embeddings_dict['word_idx'],
-        embeddings_dict['video_idx'], spe_idx, is_step1=True
+        embeddings_dict['video_idx'], spe_idx, is_conv=True
     )
     
     test_dataset = ECFDataset(
         os.path.join(FLAGS.data_path, 'test.txt'),
         tokenizer, embeddings_dict['word_idx'],
-        embeddings_dict['video_idx'], spe_idx, is_step1=True
+        embeddings_dict['video_idx'], spe_idx, is_conv=True
     )
     
     print(f"Dataset sizes - Train: {len(train_dataset)}, Dev: {len(dev_dataset)}, Test: {len(test_dataset)}")

@@ -46,7 +46,7 @@ tf.app.flags.DEFINE_string('log_path', './log', '')
 tf.app.flags.DEFINE_string('scope', 'TEMP', 'scope')
 tf.app.flags.DEFINE_string('log_file_name', 'step2.log', 'name of log file')
 tf.app.flags.DEFINE_string('save_pair', 'yes', 'whether save predicted pairs')
-tf.app.flags.DEFINE_string('step1_file_dir', 'step1/', 'file directory of step1')
+tf.app.flags.DEFINE_string('conv_file_dir', 'conv/', 'file directory of conv')
 
 
 def print_info():
@@ -55,8 +55,8 @@ def print_info():
         FLAGS.choose_emocate, FLAGS.emocate_eval, FLAGS.video_emb_file, FLAGS.audio_emb_file, FLAGS.use_x_v,  FLAGS.use_x_a))
 
     print('\n\n>>>>>>>>>>>>>>>>>>>>TRAINING INFO:')
-    print('path: {}\nbatch: {}\nlr: {}\nkb1: {}\nkb2: {}\nl2_reg: {}\nkeep_prob_v: {}\nkeep_prob_a: {}\ntraining_iter: {}\nend_run: {}\npred_future_cause: {}\nstep1_file_dir: {}\n\n'.format(
-        FLAGS.path, FLAGS.batch_size,  FLAGS.learning_rate, FLAGS.keep_prob1, FLAGS.keep_prob2, FLAGS.l2_reg, FLAGS.keep_prob_v, FLAGS.keep_prob_a, FLAGS.training_iter, FLAGS.end_run, FLAGS.pred_future_cause, FLAGS.step1_file_dir))
+    print('path: {}\nbatch: {}\nlr: {}\nkb1: {}\nkb2: {}\nl2_reg: {}\nkeep_prob_v: {}\nkeep_prob_a: {}\ntraining_iter: {}\nend_run: {}\npred_future_cause: {}\nconv_file_dir: {}\n\n'.format(
+        FLAGS.path, FLAGS.batch_size,  FLAGS.learning_rate, FLAGS.keep_prob1, FLAGS.keep_prob2, FLAGS.l2_reg, FLAGS.keep_prob_v, FLAGS.keep_prob_a, FLAGS.training_iter, FLAGS.end_run, FLAGS.pred_future_cause, FLAGS.conv_file_dir))
 
 
 def build_model(embeddings, placeholders, RNN=biLSTM):
@@ -216,7 +216,7 @@ def run():
         if os.path.exists(save_dir+'run1_train.txt'):
             save_dir1 = save_dir
         else:
-            save_dir1 = save_dir + FLAGS.step1_file_dir # 'step1/'
+            save_dir1 = save_dir + FLAGS.conv_file_dir # 'conv/'
         train_data = Dataset(save_dir1+train_file_name, word_idx, video_idx) 
         dev_data = Dataset(save_dir1+dev_file_name, word_idx, video_idx)
         test_data = Dataset(save_dir1+test_file_name, word_idx, video_idx)

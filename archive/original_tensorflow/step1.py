@@ -60,7 +60,7 @@ tf.app.flags.DEFINE_integer('training_iter', 15, 'number of training iter')
 
 tf.app.flags.DEFINE_string('log_path', './log', '')
 tf.app.flags.DEFINE_string('scope', 'TEMP', 'scope')
-tf.app.flags.DEFINE_string('log_file_name', 'step1.log', 'name of log file')
+tf.app.flags.DEFINE_string('log_file_name', 'conv.log', 'name of log file')
 
 
 
@@ -250,7 +250,7 @@ def build_model(embeddings, placeholders):
 
 class Dataset(object):
     def __init__(self, data_file_name, tokenizer, word_idx, video_idx, spe_idx):
-        x_bert_sen, x_mask_bert_sen, x_bert, x_mask_bert, x_type_bert, s_idx_bert, x, sen_len, doc_len, speaker, x_v, y_emotion, y_cause, doc_id, y_pairs = load_data_utt_step1(data_file_name, tokenizer, word_idx, video_idx, spe_idx, FLAGS.max_doc_len, FLAGS.max_sen_len, FLAGS.max_doc_len_bert, FLAGS.max_sen_len_bert, FLAGS.model_type, FLAGS.choose_emocate)
+        x_bert_sen, x_mask_bert_sen, x_bert, x_mask_bert, x_type_bert, s_idx_bert, x, sen_len, doc_len, speaker, x_v, y_emotion, y_cause, doc_id, y_pairs = load_data_utt_conv(data_file_name, tokenizer, word_idx, video_idx, spe_idx, FLAGS.max_doc_len, FLAGS.max_sen_len, FLAGS.max_doc_len_bert, FLAGS.max_sen_len_bert, FLAGS.model_type, FLAGS.choose_emocate)
 
         self.x_bert_sen, self.x_mask_bert_sen = x_bert_sen, x_mask_bert_sen
         self.x_bert, self.x_mask_bert, self.x_type_bert, self.s_idx_bert = x_bert, x_mask_bert, x_type_bert, s_idx_bert

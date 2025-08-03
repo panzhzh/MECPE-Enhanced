@@ -1,5 +1,5 @@
 """
-Step1 evaluation metrics for MECPE
+Conv evaluation metrics for MECPE
 Emotion and cause utterance-level classification evaluation
 Ported from archive/original_tensorflow/utils/pre_data_bert.py
 """
@@ -10,7 +10,7 @@ from typing import Dict, List, Tuple
 
 def cal_prf(pred_y: np.ndarray, true_y: np.ndarray, doc_len: np.ndarray, average='binary') -> Tuple[float, float, float]:
     """
-    Calculate precision, recall, F1 for binary classification (Step1 style)
+    Calculate precision, recall, F1 for binary classification (Conv style)
     Original implementation from TensorFlow code
     
     Args:
@@ -70,9 +70,9 @@ def get_predictions(logits: torch.Tensor) -> torch.Tensor:
     """Get predictions from logits"""
     return torch.argmax(logits, dim=-1)
 
-class Step1Metrics:
+class ConvMetrics:
     """
-    Step1 metrics tracker - utterance-level emotion and cause classification
+    Conv metrics tracker - utterance-level emotion and cause classification
     Following the original TensorFlow implementation
     """
     
@@ -133,10 +133,10 @@ class Step1Metrics:
     
     def compute(self) -> Dict[str, float]:
         """
-        Compute final Step1 metrics
+        Compute final Conv metrics
         
         Returns:
-            Dictionary with Step1 metrics
+            Dictionary with Conv metrics
         """
         if self.total_samples == 0:
             return {'avg_loss': 0.0}
@@ -171,7 +171,7 @@ class Step1Metrics:
         cause_labels = np.concatenate(cause_labels_padded, axis=0)
         doc_lens = np.concatenate(self.all_doc_lens, axis=0)
         
-        # Calculate Step1 metrics using original functions
+        # Calculate Conv metrics using original functions
         emo_p, emo_r, emo_f1 = cal_prf(emotion_preds, emotion_labels, doc_lens)
         cause_p, cause_r, cause_f1 = cal_prf(cause_preds, cause_labels, doc_lens)
         

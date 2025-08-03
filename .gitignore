@@ -66,7 +66,7 @@ Thumbs.db
 # Project specific
 log/
 logs/
-step1/
+conv/
 step2/
 results/
 checkpoints/

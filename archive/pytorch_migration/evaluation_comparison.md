@@ -6,10 +6,10 @@
 
 ## 评估方式对比
 
-### 内置评估 (Step1 + Step2)
+### 内置评估 (Conv + Step2)
 - **位置**: `utils/pre_data_bert.py`
 - **核心函数**: 
-  - `cal_prf()` - Step1情感/原因识别评估
+  - `cal_prf()` - Conv情感/原因识别评估
   - `prf_2nd_step()` - Step2配对评估
   - `prf_2nd_step_emocate()` - Step2情感分类配对评估
 
@@ -134,7 +134,7 @@ pair_id_all = [[doc_id, emo_id, cau_id, emotion_idx], ...]
 ## 评估指标对比
 
 ### 内置评估指标
-- **Step1**: Precision, Recall, F1 (二元分类)
+- **Conv**: Precision, Recall, F1 (二元分类)
 - **Step2**: 
   - 基础P/R/F1
   - 加权平均F1 (7类情感)

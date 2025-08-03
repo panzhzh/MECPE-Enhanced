@@ -1,19 +1,19 @@
 """
-Debug Step1 prediction quality to identify potential data issues
+Debug Conv prediction quality to identify potential data issues
 """
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-def analyze_step1_predictions():
-    """Analyze Step1 prediction files for quality issues"""
-    print("🔍 Analyzing Step1 Prediction Quality...")
+def analyze_conv_predictions():
+    """Analyze Conv prediction files for quality issues"""
+    print("🔍 Analyzing Conv Prediction Quality...")
     
-    step1_dir = "experiments/checkpoints/step1_results"
+    conv_dir = "experiments/checkpoints/conv_results"
     files = ["train_predictions.txt", "dev_predictions.txt", "test_predictions.txt"]
     
     for filename in files:
-        filepath = os.path.join(step1_dir, filename)
+        filepath = os.path.join(conv_dir, filename)
         
         if not os.path.exists(filepath):
             print(f"❌ File not found: {filepath}")
@@ -101,4 +101,4 @@ def analyze_step1_predictions():
             print("  ⚠️  WARNING: Very few cause predictions (<5%)")
 
 if __name__ == "__main__":
-    analyze_step1_predictions()
+    analyze_conv_predictions()

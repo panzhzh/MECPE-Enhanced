@@ -10,7 +10,7 @@
 #### 🔵 **archive/original_tensorflow/** - 原始TensorFlow版本
 ```
 archive/original_tensorflow/
-├── step1.py                    # 原始TensorFlow Step1训练脚本
+├── conv.py                    # 原始TensorFlow Conv训练脚本
 ├── step2.py                    # 原始TensorFlow Step2训练脚本
 ├── bert/                       # BERT相关工具（TensorFlow版）
 │   ├── modeling.py
@@ -29,7 +29,7 @@ archive/original_tensorflow/
 ```
 archive/pytorch_migration/
 ├── config.py                   # PyTorch配置系统
-├── step1_pytorch.py           # PyTorch Step1训练脚本
+├── conv_pytorch.py           # PyTorch Conv训练脚本
 ├── step2_pytorch.py           # PyTorch Step2训练脚本
 ├── pytorch_utils/             # PyTorch工具模块
 │   ├── __init__.py

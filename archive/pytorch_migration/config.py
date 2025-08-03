@@ -55,12 +55,12 @@ class Config:
     # 日志和保存
     log_path: str = './log'
     scope: str = 'PyTorch_TEMP'
-    log_file_name: str = 'step1_pytorch.log'
+    log_file_name: str = 'conv_pytorch.log'
     
     # Step2特定参数
     pred_future_cause: bool = True
     emocate_eval: int = 6
-    step1_file_dir: str = 'step1/'
+    conv_file_dir: str = 'conv/'
     save_pair: bool = True
     
     # 设备

@@ -1,15 +1,15 @@
 """
-Simple baseline model for MECPE
-Text-only transformer model with simple classification heads
+Conversation-level model for MECPE
+Text-only transformer model for emotion and cause classification
 """
 import torch
 import torch.nn as nn
 from transformers import AutoModel, AutoTokenizer
 from typing import Dict, Optional
 
-class SimpleBaselineModel(nn.Module):
+class ConvModel(nn.Module):
     """
-    Simple baseline model for emotion-cause pair extraction
+    Conversation-level model for emotion-cause classification
     Text-only with RoBERTa encoder + classification heads
     """
     
@@ -38,7 +38,7 @@ class SimpleBaselineModel(nn.Module):
             nn.Linear(config.model.fusion_hidden_size, config.model.num_labels)
         )
         
-        print(f"✅ Initialized SimpleBaselineModel with {config.model.text_model}")
+        print(f"✅ Initialized ConvModel with {config.model.text_model}")
         print(f"   Hidden size: {self.hidden_size}")
     
     def forward(self, 
@@ -130,6 +130,6 @@ class SimpleBaselineModel(nn.Module):
             'cause_loss': cause_loss
         }
 
-def create_baseline_model(config):
-    """Factory function to create baseline model"""
-    return SimpleBaselineModel(config)
+def create_conv_model(config):
+    """Factory function to create conversation-level model"""
+    return ConvModel(config)

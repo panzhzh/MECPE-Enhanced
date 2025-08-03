@@ -2,12 +2,12 @@
 
 ## 🎯 Project Status
 
-**Phase 1 完成**: Successfully migrated original TensorFlow Step1 evaluation to PyTorch
+**Phase 1 完成**: Successfully migrated original TensorFlow Conv evaluation to PyTorch
 
 ### ✅ Current Features
 
-- **PyTorch实现**: 完整的MECPE Step1话语级别评估系统
-- **双重评估**: Step1 metrics (情感/原因话语识别) + CodaLab metrics (情感-原因对识别)
+- **PyTorch实现**: 完整的MECPE Conv话语级别评估系统
+- **双重评估**: Conv metrics (情感/原因话语识别) + CodaLab metrics (情感-原因对识别)
 - **多模态支持**: 文本、音频、视频数据处理 (当前仅文本已测试)
 - **完整数据流**: 从ECF数据集到模型训练的完整pipeline
 
@@ -16,9 +16,9 @@
 ```
 src/
 ├── data/dataset.py          # ECF数据集加载和预处理
-├── models/baseline_model.py # BERT/BiLSTM基线模型
+├── models/conv_model.py     # RoBERTa对话级别模型
 ├── evaluation/
-│   ├── step1_metrics.py     # Step1话语级别评估 (移植自TensorFlow)
+│   ├── conv_metrics.py     # Conv话语级别评估 (移植自TensorFlow)
 │   ├── codalab_metrics.py   # 官方CodaLab对级别评估
 │   └── metrics.py           # 统一评估接口
 └── utils/config.py          # 配置管理
@@ -27,12 +27,12 @@ src/
 ### 🚀 Quick Start
 
 ```bash
-# 训练基线模型
-python scripts/train_baseline.py
+# 训练对话级别模型
+python scripts/train_conv.py
 
 # 输出示例:
-# Test Step1 Emotion F1: 0.7736  (情感话语识别F1)
-# Test Step1 Cause F1: 0.7251    (原因话语识别F1)  
+# Test Conv Emotion F1: 0.7736  (情感话语识别F1)
+# Test Conv Cause F1: 0.7251    (原因话语识别F1)  
 # Test CodaLab Weighted F1: 0.2493 (情感-原因对F1)
 ```
 
@@ -63,4 +63,4 @@ python scripts/train_baseline.py
 
 ---
 
-**里程碑**: 成功完成TensorFlow到PyTorch的Step1评估系统迁移 ✨
+**里程碑**: 成功完成TensorFlow到PyTorch的Conv评估系统迁移 ✨

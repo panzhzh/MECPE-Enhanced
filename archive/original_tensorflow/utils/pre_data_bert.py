@@ -166,7 +166,7 @@ def cut_by_max_len(x_bert_tmp, x_mask_bert_tmp, x_type_bert_tmp, s_idx_bert_tmp,
     x_type_bert_tmp = x_type_bert_tmp[:max_len]
     return x_bert_tmp, x_mask_bert_tmp, x_type_bert_tmp, s_idx_bert_tmp
 
-def load_data_utt_step1(input_file, tokenizer, word_idx, video_idx, spe_idx, max_doc_len, max_sen_len, max_doc_len_bert, max_sen_len_bert, model_type='', choose_emocate=''):
+def load_data_utt_conv(input_file, tokenizer, word_idx, video_idx, spe_idx, max_doc_len, max_sen_len, max_doc_len_bert, max_sen_len_bert, model_type='', choose_emocate=''):
     print('\nload data_file: {}\n'.format(input_file))
     doc_id, y_emotion, y_cause, x_bert_sen, x_mask_bert_sen, x_bert, x_mask_bert, x_type_bert, s_idx_bert, x, x_v, sen_len, doc_len, speaker, y_pairs, num_token = [[] for _ in range(16)]
     cut_num, cut_num_sen, cut_num_bert_sen, num_emo, num_emo_cause, num_pairs = [0 for _ in range(6)] 

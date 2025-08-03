@@ -8,11 +8,11 @@
 ### ✅ 完成的工作
 - **完全重写**: 从TensorFlow 1.x迁移到PyTorch
 - **架构现代化**: 使用DataLoader、modern optimizers等
-- **功能验证**: Step1和Step2都成功训练并达到预期性能
+- **功能验证**: Conv和Step2都成功训练并达到预期性能
 - **多模态支持**: 文本+视频+音频特征融合
 
 ### 📊 性能表现
-- **Step1**: Emotion F1: 0.73, Cause F1: 0.64
+- **Conv**: Emotion F1: 0.73, Cause F1: 0.64
 - **Step2**: 架构完整，训练流水线验证通过
 - **多模态**: 成功集成视频和音频特征
 
@@ -20,12 +20,12 @@
 
 ### 核心模块
 - `config.py` - 统一配置管理（替代TensorFlow FLAGS）
-- `step1_pytorch.py` - PyTorch版Step1训练脚本
+- `conv_pytorch.py` - PyTorch版Conv训练脚本
 - `step2_pytorch.py` - PyTorch版Step2训练脚本
 
 ### PyTorch工具包
 - `pytorch_utils/data_loader.py` - 现代化数据加载器
-- `pytorch_utils/models.py` - Step1和Step2模型定义
+- `pytorch_utils/models.py` - Conv和Step2模型定义
 - `pytorch_utils/metrics.py` - 评估指标计算
 
 ### 开发和调试
@@ -58,7 +58,7 @@
 - 实现了等价的多模态融合方式
 
 ### 2. 性能验证
-- Step1训练成功：达到论文报告的性能水平
+- Conv训练成功：达到论文报告的性能水平
 - Step2架构完整：模型定义和数据流水线全部完成
 - 多模态特征：成功集成4096维视频和6373维音频特征
 

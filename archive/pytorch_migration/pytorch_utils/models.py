@@ -1,6 +1,6 @@
 """
 PyTorch版本的模型实现
-包含Step1的情感和原因识别模型
+包含Conv的情感和原因识别模型
 """
 import torch
 import torch.nn as nn
@@ -162,7 +162,7 @@ class BERTEncoder(nn.Module):
 
 
 class EmotionCauseModel(nn.Module):
-    """Step1: 情感和原因识别模型"""
+    """Conv: 情感和原因识别模型"""
     
     def __init__(self, embeddings_dict: Dict, config=None):
         super().__init__()
@@ -377,7 +377,7 @@ class EmotionCauseModel(nn.Module):
 
 
 class EmotionCauseLoss(nn.Module):
-    """Step1的损失函数"""
+    """Conv的损失函数"""
     
     def __init__(self, config=None):
         super().__init__()

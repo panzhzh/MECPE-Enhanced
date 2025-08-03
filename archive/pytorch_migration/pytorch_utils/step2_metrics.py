@@ -8,8 +8,8 @@ import numpy as np
 from typing import Dict, List, Tuple, Any
 from collections import defaultdict
 
-# Import the Step1 pair evaluation functions
-from .step1_metrics import cal_prf
+# Import the Conv pair evaluation functions
+from .conv_metrics import cal_prf
 
 def prf_2nd_step(pair_id_all: List[Tuple], pair_id: List[Tuple], pred_y: np.ndarray) -> List[float]:
     """

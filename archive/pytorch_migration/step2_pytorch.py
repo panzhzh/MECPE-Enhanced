@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 PyTorch版本的Step2：情感-原因配对
-基于Step1的预测结果进行情感-原因对的识别
+基于Conv的预测结果进行情感-原因对的识别
 """
 import os
 import time
@@ -190,7 +190,7 @@ def main():
         embeddings_dict['word_idx'],
         embeddings_dict['video_idx'],
         spe_idx,
-        is_step1=False
+        is_conv=False
     )
     
     # 验证集
@@ -200,7 +200,7 @@ def main():
         embeddings_dict['word_idx'],
         embeddings_dict['video_idx'],
         spe_idx,
-        is_step1=False
+        is_conv=False
     )
     
     # 测试集
@@ -210,7 +210,7 @@ def main():
         embeddings_dict['word_idx'],
         embeddings_dict['video_idx'],
         spe_idx,
-        is_step1=False
+        is_conv=False
     )
     
     print(f"Train: {len(train_dataset)} pairs")

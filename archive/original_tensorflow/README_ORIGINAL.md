@@ -6,7 +6,7 @@
 ## 📁 文件说明
 
 ### 核心训练脚本
-- `step1.py` - TensorFlow版本的Step1（情感和原因识别）训练脚本
+- `conv.py` - TensorFlow版本的Conv（情感和原因识别）训练脚本
 - `step2.py` - TensorFlow版本的Step2（情感-原因配对）训练脚本
 
 ### BERT支持模块

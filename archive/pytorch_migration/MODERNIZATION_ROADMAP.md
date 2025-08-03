@@ -86,7 +86,7 @@
 ### 🥇 **优先级1: 纯文本现代化** (当前可行)
 ```bash
 # 立即可实施，无需额外数据
-python step1_modern.py --model_type RoBERTa --text_encoder roberta-large
+python conv_modern.py --model_type RoBERTa --text_encoder roberta-large
 ```
 **优势**: 
 - 利用现有数据
