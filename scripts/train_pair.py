@@ -135,18 +135,22 @@ def evaluate_pair_full(model, dataloader, device, config):
             doc_data = {}  # Reset for each batch - this is correct per-batch processing
             
             for i, pair_id in enumerate(batch['pair_ids']):
-                doc_id, emo_utt, cause_utt, emotion_cat = pair_id
+                doc_id, emo_utt, cause_utt, true_emotion_cat = pair_id  # true_emotion_cat仅用于构建true_pairs
+                
+                # 方案2：使用conv模型的预测emotion，而不是真实emotion_cat
+                conv_predicted_emotion = batch['conv_predicted_emotions'][i]
                 
                 if doc_id not in doc_data:
                     doc_data[doc_id] = {'predicted_pairs': [], 'true_pairs': []}
                 
                 # Add prediction if model predicts this is a true pair
+                # 关键修复：使用conv模型预测的emotion，而不是真实的emotion_cat
                 if predictions[i] == 1:
-                    doc_data[doc_id]['predicted_pairs'].append((emo_utt, cause_utt, emotion_cat))
+                    doc_data[doc_id]['predicted_pairs'].append((emo_utt, cause_utt, conv_predicted_emotion))
                 
-                # Add true pair if label is 1
+                # Add true pair if label is 1 (用真实emotion用于评估对比)
                 if labels[i].item() == 1:
-                    doc_data[doc_id]['true_pairs'].append((emo_utt, cause_utt, emotion_cat))
+                    doc_data[doc_id]['true_pairs'].append((emo_utt, cause_utt, true_emotion_cat))
             
             # Update metrics for each document in this batch
             for doc_id, data in doc_data.items():

@@ -131,11 +131,11 @@ class PairDataset(Dataset):
                     for cause_utt in cause_utts:
                         # Check future cause constraint
                         if self.pred_future_cause or cause_utt <= emo_utt:
-                            # Determine emotion category
-                            if self.use_emotion_categories:
-                                emotion_cat = self.emotion_idx.get(emotions[emo_utt-1], 0)
-                            else:
-                                emotion_cat = self.emotion_idx.get(emotions[emo_utt-1], 0)
+                            # Use conv model's emotion prediction instead of true emotion (方案2)
+                            # emotion_pred is from conv model: 0-6 mapping to emotion categories
+                            predicted_emotion_idx = utterances[emo_utt-1]['emotion_pred']
+                            # Convert prediction index to emotion category 
+                            emotion_cat = predicted_emotion_idx
                             
                             pair_tuple = (doc_id, emo_utt, cause_utt, emotion_cat)
                             pair_id.append(pair_tuple)
@@ -147,6 +147,9 @@ class PairDataset(Dataset):
                             distance = cause_utt - emo_utt + 100
                             
                             # Create pair data
+                            # 方案2：加载conv模型的预测结果
+                            conv_predicted_emotion = utterances[emo_utt-1]['emotion_pred']  # Conv模型预测的emotion
+                            
                             pair_data = {
                                 'doc_id': doc_id,
                                 'emotion_utt_id': emo_utt - 1,  # Convert to 0-indexed
@@ -154,7 +157,8 @@ class PairDataset(Dataset):
                                 'emotion_text': utterances[emo_utt-1]['text'],
                                 'cause_text': utterances[cause_utt-1]['text'],
                                 'distance': distance,
-                                'emotion_category': emotion_cat,
+                                'emotion_category': emotion_cat,  # 这个用于构建pair_id，但评估时不使用
+                                'conv_predicted_emotion': conv_predicted_emotion,  # 方案2：conv模型预测
                                 'label': 1 if is_true_pair else 0,
                                 'pair_id': pair_tuple
                             }
@@ -207,7 +211,8 @@ class PairDataset(Dataset):
             'distance': torch.tensor(pair['distance'], dtype=torch.long),
             'label': torch.tensor(pair['label'], dtype=torch.long),
             'doc_id': pair['doc_id'],
-            'pair_id': pair['pair_id']
+            'pair_id': pair['pair_id'],
+            'conv_predicted_emotion': pair['conv_predicted_emotion']  # 方案2：conv模型预测
         }
         
         # Add emotion category if using emotion categories
@@ -232,7 +237,8 @@ def collate_pair_samples(batch: List[Dict]) -> Dict[str, torch.Tensor]:
         'distance': distance,
         'labels': labels,
         'doc_ids': [item['doc_id'] for item in batch],
-        'pair_ids': [item['pair_id'] for item in batch]
+        'pair_ids': [item['pair_id'] for item in batch],
+        'conv_predicted_emotions': [item['conv_predicted_emotion'] for item in batch]  # 方案2：conv预测
     }
     
     # Add emotion category if present
