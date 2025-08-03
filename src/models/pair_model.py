@@ -256,7 +256,7 @@ class PairModel(nn.Module):
         class_labels = torch.argmax(labels, dim=-1)  # [batch_size]
         
         # Use Focal Loss to handle extreme class imbalance
-        # Focal Loss automatically handles imbalance without manual weight tuning
+        # Remove problematic alpha parameter to avoid misconfiguration
         ce_loss_raw = F.cross_entropy(logits, class_labels, reduction='none')
         
         # Convert to probabilities and get the probability of the true class
@@ -264,12 +264,11 @@ class PairModel(nn.Module):
         pt = probs.gather(1, class_labels.unsqueeze(1)).squeeze(1)  # p_t
         
         # Focal loss parameters
-        alpha = 0.25  # Weight for positive class
-        gamma = 2.0   # Focusing parameter
+        gamma = 2.0   # Focusing parameter (handles hard/easy samples)
         
-        # Apply focal loss formula: -α(1-pt)^γ * log(pt)
-        alpha_t = alpha * class_labels + (1 - alpha) * (1 - class_labels)
-        focal_weight = alpha_t * (1 - pt) ** gamma
+        # Apply simplified focal loss formula: -(1-pt)^γ * log(pt)
+        # This automatically focuses on hard samples without class weighting issues
+        focal_weight = (1 - pt) ** gamma
         ce_loss = torch.mean(focal_weight * ce_loss_raw)
         
         # L2 regularization for classifier weights

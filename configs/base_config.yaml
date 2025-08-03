@@ -64,7 +64,7 @@ training:
   
   # Pair-level settings (following original TensorFlow)
   pair_batch_size: 100  # Original pair training batch size
-  pair_learning_rate: 0.005  # Original pair training learning rate
+  pair_learning_rate: 0.00005  # Original pair training learning rate
   pair_num_epochs: 1  # training_iter (测试end_to_end)
   l2_reg: 0.00001  # L2 regularization (shared with Conv)
   

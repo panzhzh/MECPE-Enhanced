@@ -15,6 +15,7 @@ import time
 
 from src.utils.config import Config
 from src.data.pair_dataset import create_pair_datasets, collate_pair_samples
+from src.data.conv_dataset import ECFDataset, collate_conversations
 from src.models.pair_model import create_pair_model
 from src.models.conv_model import create_conv_model
 from src.evaluation.end_to_end_metrics import EndToEndMetrics, evaluate_end_to_end_full
@@ -126,7 +127,7 @@ def main():
     print(f"Dev: {len(dev_dataset)} pairs")
     print(f"Test: {len(test_dataset)} pairs")
     
-    # Create dataloaders
+    # Create dataloaders for pair training
     train_loader = DataLoader(
         train_dataset, 
         batch_size=config.training.pair_batch_size,
@@ -144,6 +145,27 @@ def main():
         batch_size=config.training.pair_batch_size,
         shuffle=False,
         collate_fn=collate_pair_samples
+    )
+    
+    # Create original conversation datasets for end-to-end evaluation
+    # CRITICAL TEST: Use TRAIN dataset for all evaluation to verify model learning ability
+    print("\n📊 Loading TRAIN conversation dataset for E2E evaluation (sanity check)...")
+    print("🔬 VERIFICATION TEST: Using train data for dev/test to check if model can learn at all!")
+    
+    train_conv_dataset = ECFDataset(split="train", config=config, load_video=False, load_audio=False)
+    
+    # Use train dataset for both dev and test evaluation to verify learning capability
+    dev_conv_loader = DataLoader(
+        train_conv_dataset,
+        batch_size=config.training.batch_size,  # Use conv batch size
+        shuffle=False,
+        collate_fn=collate_conversations
+    )
+    test_conv_loader = DataLoader(
+        train_conv_dataset,
+        batch_size=config.training.batch_size,  # Use conv batch size
+        shuffle=False,
+        collate_fn=collate_conversations
     )
     
     # Create model
@@ -192,9 +214,9 @@ def main():
         train_metrics = run_epoch(model, train_loader, optimizer, device, is_train=True, config=config)
         print(f"Train Loss: {train_metrics['avg_loss']:.4f}, Accuracy: {train_metrics['accuracy']:.4f}")
         
-        # Evaluation on dev set
+        # Evaluation on dev set (using original conversation data for E2E evaluation)
         print("Evaluating on dev set...")
-        dev_metrics = evaluate_pair_full(model, dev_loader, device, config, conv_model) # Pass both models
+        dev_metrics = evaluate_pair_full(model, dev_conv_loader, device, config, conv_model) # Pass both models
         
         # Print main metrics using correct keys from PairLevelMetrics
         # Use weighted F1 as main metric (following CodaLab standards)
@@ -214,7 +236,7 @@ def main():
         
         # Also evaluate on test set for monitoring (but don't use for model selection)
         print("Evaluating on test set...")
-        test_metrics = evaluate_pair_full(model, test_loader, device, config, conv_model)
+        test_metrics = evaluate_pair_full(model, test_conv_loader, device, config, conv_model)
         test_main_f1 = test_metrics.get('weighted_f1', 0.0)
         test_micro_f1 = test_metrics.get('pair_f1', 0.0)
         
@@ -249,7 +271,7 @@ def main():
         model_save_path = os.path.join(config.training.save_dir, 'best_pair_model.pt')
         model.load_state_dict(torch.load(model_save_path))
         
-        final_test_metrics = evaluate_pair_full(model, test_loader, device, config, conv_model)
+        final_test_metrics = evaluate_pair_full(model, test_conv_loader, device, config, conv_model)
         
         final_weighted_f1 = final_test_metrics.get('weighted_f1', 0.0)
         final_micro_f1 = final_test_metrics.get('pair_f1', 0.0)
