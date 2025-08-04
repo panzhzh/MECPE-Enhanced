@@ -377,5 +377,173 @@ def cal_prf_emocate(pred_y, true_y, doc_len):
     w_avg_f = np.sum(f * weight)
     return np.append(f, w_avg_f)
 
-# 为了保持文件大小合理，其他函数将在后续添加
-# TODO: 实现剩余的评估函数 (prf_2nd_step_emocate, prf_2nd_step, load_data_utt_step2)
+def load_data_utt_step2(input_file, word_idx, video_idx, max_sen_len=45, choose_emocate='', pred_future_cause=1, test_bound=''):
+    """
+    加载step2数据，与原版保持一致
+    返回: x, sen_len, distance, x_emocate, x_v, y, pair_id_all, pair_id, doc_id_list, y_pairs
+    """
+    print('\nload data_file: {}\n'.format(input_file))
+    max_doc_len = 35
+    x, sen_len, distance, x_emocate, x_v, y, y_pairs, pair_id_all, pair_id, doc_id_list = [[] for i in range(10)]
+    
+    n_cut = 0
+    inputFile = open(input_file, 'r', encoding='utf-8')
+    while True:
+        line = inputFile.readline()
+        if line == '': break
+        line = line.strip().split()
+        doc_id, d_len = int(line[0]), int(line[1])
+        doc_id_list.append(doc_id)
+        
+        pairs = eval(inputFile.readline().strip())
+        if pairs != []: 
+            if len(pairs[0]) > 2:
+                pairs = [(p[0],p[1])  for p in pairs]
+                pairs = sorted(list(set(pairs))) # If the pair contains the indexes of cause span (len(p)=4), we need to remove duplicates when taking the utterance pairs.
+        if not pred_future_cause:
+            pairs = [(p[0],p[1])  for p in pairs  if (p[1]-p[0])<=0]
+        y_pairs.append(pairs)
+        true_cause_list = sorted(list(set([p[1] for p in pairs])))
+
+        x_tmp = np.zeros((max_doc_len, max_sen_len),dtype=np.int32)
+        sen_len_tmp, y_emo_tmp, predy_emo_tmp = [np.zeros(max_doc_len,dtype=np.int32) for _ in range(3)]
+        emo_list, cause_list, true_emo_list = [[] for _ in range(3)]
+        
+        for i in range(d_len):
+            line = inputFile.readline().strip().split(' | ')
+            predy_emo_tmp[i] = int(line[1].strip())
+
+            if int(line[1].strip())>0:
+                emo_list.append(i+1)
+            if int(line[2].strip())>0:
+                cause_list.append(i+1)
+            if int(emotion_idx[line[4].strip()])>0:
+                true_emo_list.append(i+1)
+
+            y_emo_tmp[i] = emotion_idx[line[4].strip()]
+
+            words = line[5]
+            words_seq = token_seq(words)
+            sen_len_tmp[i] = min(len(words_seq), max_sen_len)
+            for j, word in enumerate(words_seq):
+                if j >= max_sen_len:
+                    n_cut += 1
+                    break
+                if word in word_idx:
+                    x_tmp[i][j] = word_idx[word]
+                else:
+                    x_tmp[i][j] = word_idx.get(word, 0)  # 使用0作为未知词
+
+        for p in pairs:
+            new_p = [doc_id, p[0], p[1], y_emo_tmp[p[0]-1]]
+            pair_id_all.append(new_p)
+        
+        if test_bound=='EC':
+            emo_list = true_emo_list
+        if test_bound=='CE':
+            cause_list = true_cause_list
+
+        pair_flag = False
+        for i in emo_list:
+            for j in cause_list:
+                if pred_future_cause:
+                    pair_flag = True
+                else:
+                    if i>=j:
+                        pair_flag = True
+                    else:
+                        pair_flag = False
+
+                if pair_flag:
+                    if choose_emocate:
+                        pair_id_cur = [doc_id, i, j, predy_emo_tmp[i-1]]
+                        if test_bound=='EC':
+                            pair_id_cur = [doc_id, i, j, y_emo_tmp[i-1]]
+                    else:
+                        pair_id_cur = [doc_id, i, j, y_emo_tmp[i-1]]
+                    pair_id.append(pair_id_cur)
+                    y.append([0,1] if pair_id_cur in pair_id_all else [1,0])
+                    x.append([x_tmp[i-1],x_tmp[j-1]])
+                    sen_len.append([sen_len_tmp[i-1], sen_len_tmp[j-1]])
+                    distance.append(j-i+100)
+                    if test_bound=='EC':
+                        x_emocate.append(y_emo_tmp[i-1])
+                    else:
+                        x_emocate.append(predy_emo_tmp[i-1])
+                    
+                    # 处理视频特征索引
+                    x_v_i = video_idx.get('dia{}utt{}'.format(doc_id, i), 0)
+                    x_v_j = video_idx.get('dia{}utt{}'.format(doc_id, j), 0)
+                    x_v.append([x_v_i, x_v_j])
+
+    x, sen_len, distance, x_emocate, x_v, y = map(np.array, [x, sen_len, distance, x_emocate, x_v, y])
+    for var in ['x', 'sen_len', 'distance', 'x_emocate', 'x_v', 'y']:
+        print('{}.shape {}'.format( var, eval(var).shape ))
+    print('n_pairs: {}, n_cut: {}, (y-negative, y-positive): {}'.format(len(pair_id_all), n_cut, y.sum(axis=0)))
+    print('load data done!\n')
+    
+    return x, sen_len, distance, x_emocate, x_v, y, pair_id_all, pair_id, doc_id_list, y_pairs
+
+def prf_2nd_step(pair_id_all, pair_id, pred_y):
+    """
+    计算step2的precision, recall, f1，与原版保持一致
+    """
+    pair_id_filtered = []
+    for i in range(len(pair_id)):
+        if pred_y[i]:
+            pair_id_filtered.append(pair_id[i])
+    
+    def cal_prf(pair_id_all, pair_id):
+        acc_num, true_num, pred_num = 0, len(pair_id_all), len(pair_id)
+        for p in pair_id:
+            if p in pair_id_all:
+                acc_num += 1
+        p, r = acc_num/(pred_num+1e-8), acc_num/(true_num+1e-8)
+        f1 = 2*p*r/(p+r+1e-8)
+        return [p, r, f1]
+    
+    keep_rate = len(pair_id_filtered)/(len(pair_id)+1e-8)
+    return cal_prf(pair_id_all, pair_id_filtered) + cal_prf(pair_id_all, pair_id) + [keep_rate]
+
+def prf_2nd_step_emocate(pair_id_all, pair_id, pred_y):
+    """
+    计算step2情绪类别的precision, recall, f1，与原版保持一致
+    """
+    pair_id_filtered = []
+    for i in range(len(pair_id)):
+        if pred_y[i]:
+            pair_id_filtered.append(pair_id[i])
+    keep_rate = len(pair_id_filtered)/(len(pair_id)+1e-8)
+
+    def cal_prf_emocate(pair_id_all, pair_id):
+        conf_mat = np.zeros([7,7])
+        for p in pair_id:
+            if p in pair_id_all:
+                conf_mat[p[3]][p[3]] += 1
+            else:
+                conf_mat[0][p[3]] += 1
+        for p in pair_id_all:
+            if p not in pair_id:
+                conf_mat[p[3]][0] += 1
+        p = np.diagonal( conf_mat / np.reshape(np.sum(conf_mat, axis = 0) + 1e-8, [1,7]) )
+        r = np.diagonal( conf_mat / np.reshape(np.sum(conf_mat, axis = 1) + 1e-8, [7,1]) )
+        f = 2*p*r/(p+r+1e-8)
+        weight0 = np.sum(conf_mat, axis = 1)
+        weight = weight0[1:] / np.sum(weight0[1:])
+        w_avg_p = np.sum(p[1:] * weight)
+        w_avg_r = np.sum(r[1:] * weight)
+        w_avg_f = np.sum(f[1:] * weight)
+
+        # 不考虑占比较小的disgust/fear ['neutral','anger', 'disgust', 'fear', 'joy', 'sadness', 'surprise']
+        idx = [1,4,5,6]
+        weight1 = weight0[idx]
+        weight = weight1 / np.sum(weight1)
+        w_avg_p_part = np.sum(p[idx] * weight)
+        w_avg_r_part = np.sum(r[idx] * weight)
+        w_avg_f_part = np.sum(f[idx] * weight)
+        
+        results = list(f[1:]) + [w_avg_f, w_avg_p, w_avg_r, w_avg_f_part, w_avg_p_part, w_avg_r_part]  
+        # results = list(f[1:]) + [w_avg_p, w_avg_r, w_avg_f, w_avg_p_part, w_avg_r_part, w_avg_f_part]
+        return results
+    
+    return cal_prf_emocate(pair_id_all, pair_id_filtered) + cal_prf_emocate(pair_id_all, pair_id) + [keep_rate]

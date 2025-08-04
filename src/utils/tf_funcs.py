@@ -315,8 +315,10 @@ def cross_modal_trans(Q, KV, n_hidden, cmt_num_layer=4, n_head=1, cmt_dropout=0,
 
 def layer_normalize(inputs, epsilon=1e-8, scope="ln"):
     """层归一化的函数式接口"""
-    norm = LayerNorm(inputs.size(-1), epsilon)
-    return norm(inputs)
+    # 直接实现layer normalization而不需要创建LayerNorm对象
+    mean = inputs.mean(-1, keepdim=True)
+    std = inputs.std(-1, keepdim=True)
+    return (inputs - mean) / (std + epsilon)
 
 def att_var(inputs, length, w1, b1, w2, device='cpu'):
     """注意力机制的函数式接口"""

@@ -1,0 +1,9 @@
+1 3
+[[1, 2]]
+1 | dia1utt1 | joy | hello world
+2 | dia1utt2 | neutral | this is sad
+3 | dia1utt3 | neutral | okay then
+2 2
+[[1, 2]]
+1 | dia2utt1 | anger | i am angry
+2 | dia2utt2 | neutral | why so
