@@ -20,11 +20,13 @@ parser = argparse.ArgumentParser()
 
 # >>>>>>>>>>>>>>>>>>>> For Model <<<<<<<<<<<<<<<<<<<< 
 ## embedding parameters
-parser.add_argument('--w2v_file', default='./data/ECF_glove_300.txt', help='embedding file')
-parser.add_argument('--path', default='./data/', help='path for dataset')
-parser.add_argument('--video_emb_file', default='./data/video_embedding_4096.npy', help='ndarray (13620, 4096)')
-parser.add_argument('--audio_emb_file', default='./data/audio_embedding_6373.npy', help='ndarray (13620, 6373)')
-parser.add_argument('--video_idx_file', default='./data/video_id_mapping.npy', help='mapping dict: {dia1utt1: 1, ...}')
+# 获取脚本所在目录的绝对路径
+script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+parser.add_argument('--w2v_file', default=os.path.join(script_dir, 'data/ECF_glove_300.txt'), help='embedding file')
+parser.add_argument('--path', default=os.path.join(script_dir, 'data/'), help='path for dataset')  
+parser.add_argument('--video_emb_file', default=os.path.join(script_dir, 'data/video_embedding_4096.npy'), help='ndarray (13620, 4096)')
+parser.add_argument('--audio_emb_file', default=os.path.join(script_dir, 'data/audio_embedding_6373.npy'), help='ndarray (13620, 6373)')
+parser.add_argument('--video_idx_file', default=os.path.join(script_dir, 'data/video_id_mapping.npy'), help='mapping dict: {dia1utt1: 1, ...}')
 parser.add_argument('--embedding_dim', type=int, default=300, help='dimension of word embedding')
 parser.add_argument('--embedding_dim_pos', type=int, default=50, help='dimension of position embedding')
 
@@ -63,7 +65,7 @@ parser.add_argument('--emo', type=float, default=1., help='loss weight of emotio
 parser.add_argument('--cause', type=float, default=1., help='loss weight of cause ext.')
 parser.add_argument('--training_iter', type=int, default=15, help='number of training iter')
 
-parser.add_argument('--log_path', default='./log', help='log path')
+parser.add_argument('--log_path', default=os.path.join(script_dir, 'log'), help='log path')
 parser.add_argument('--scope', default='TEMP', help='scope')
 parser.add_argument('--log_file_name', default='conv.log', help='name of log file')
 
@@ -87,7 +89,7 @@ def pre_set():
         FLAGS.batch_size = 32
         FLAGS.learning_rate = 0.005
         FLAGS.keep_prob1 = 0.5
-        FLAGS.training_iter = 30
+        FLAGS.training_iter = 2  # Temporary: reduce to 2 epochs for testing
 
 def print_info():
     """打印模型和训练信息，与原版保持一致"""
@@ -505,6 +507,10 @@ def run():
         te_max_p_cause, te_max_r_cause, te_max_f1_cause = -1.0, -1.0, -1.0
         te_max_f1_emo_emocate = -1.0
         
+        # 初始化最佳预测结果变量
+        tr_pred_emotion_best, de_pred_emotion_best, te_pred_emotion_best = None, None, None
+        tr_pred_cause_best, de_pred_cause_best, te_pred_cause_best = None, None, None
+        
         for epoch in range(FLAGS.training_iter):
             start_time = time.time()
             step = 1
@@ -609,8 +615,33 @@ def run():
                 
                 step += 1
             
-            # 评估dev set
+            # 评估阶段
             model.eval()
+            
+            # 聚合结果函数
+            def combine_result(x):
+                ret = []
+                for batch_data in list(x):
+                    ret.extend(batch_data)  # 使用extend而不是append来展平批次
+                return ret  # 返回列表，不转换为numpy数组
+            
+            # 训练集预测(用于生成会话文件)
+            train_results = []
+            with torch.no_grad():
+                for batch in train_loader:
+                    pred_emotion, pred_emo_video, pred_emo_audio, pred_cause, reg_loss = model(batch, is_training=False)
+                    
+                    pred_y_emo = torch.argmax(pred_emotion, dim=-1).cpu().numpy()
+                    pred_y_cause = torch.argmax(pred_cause, dim=-1).cpu().numpy()
+                    doc_len_batch = batch['doc_len'].cpu().numpy()
+                    
+                    train_results.append([pred_y_cause, pred_y_emo, doc_len_batch])
+            
+            # 转置train_results结构：从[[batch1], [batch2], ...] 到 [[all_pred_y_cause], [all_pred_y_emo], [all_doc_len]]
+            train_results_transposed = list(zip(*train_results))
+            tr_pred_y_cause, tr_pred_y_emo, tr_doc_len_batch = map(combine_result, train_results_transposed)
+            
+            # 评估dev set
             dev_results = []
             with torch.no_grad():
                 for batch in dev_loader:
@@ -727,13 +758,6 @@ def run():
                     test_results.append([total_loss.item(), loss_emotion.item(), loss_cause.item(),
                                        pred_y_cause, true_y_cause, pred_y_emo, true_y_emo, doc_len_batch])
             
-            # 聚合结果
-            def combine_result(x):
-                ret = []
-                for batch_data in list(x):
-                    ret.append(batch_data)
-                return ret
-            
             # Dev结果
             dev_results = list(zip(*dev_results))
             de_loss = np.array(dev_results[0]).mean()
@@ -755,6 +779,10 @@ def run():
                     max_f1_emo_emocate = de_f1_emo_emocate[-1]
                     te_max_f1_emo_emocate = te_f1_emo_emocate
                     max_epoch_index_emo = epoch + 1
+                    # 保存最佳情绪预测结果用于生成会话文件(情绪类别模式)
+                    tr_pred_emotion_best = tr_pred_y_emo
+                    de_pred_emotion_best = de_pred_y_emo  
+                    te_pred_emotion_best = te_pred_y_emo
                 
                 print(f'emotion_prediction_emocate: \ndev f1 {np.around(de_f1_emo_emocate, decimals=4)}')
                 print(f'dev max_f1 {max_f1_emo_emocate:.4f}')
@@ -784,6 +812,10 @@ def run():
                     max_p_emo, max_r_emo, max_f1_emo = de_p, de_r, de_f1
                     te_max_p_emo, te_max_r_emo, te_max_f1_emo = te_p, te_r, te_f1
                     max_epoch_index_emo = epoch + 1
+                    # 保存最佳情绪预测结果用于生成会话文件
+                    tr_pred_emotion_best = tr_pred_y_emo
+                    de_pred_emotion_best = de_pred_y_emo  
+                    te_pred_emotion_best = te_pred_y_emo
                 
                 print(f'emotion_prediction: \ndev p {de_p:.4f} r {de_r:.4f} f1 {de_f1:.4f}')
                 print(f'dev max_p {max_p_emo:.4f} max_r {max_r_emo:.4f} max_f1 {max_f1_emo:.4f}')
@@ -797,6 +829,10 @@ def run():
                 max_p_cause, max_r_cause, max_f1_cause = de_p, de_r, de_f1
                 te_max_p_cause, te_max_r_cause, te_max_f1_cause = te_p, te_r, te_f1
                 max_epoch_index_cause = epoch + 1
+                # 保存最佳原因预测结果用于生成会话文件
+                tr_pred_cause_best = tr_pred_y_cause
+                de_pred_cause_best = de_pred_y_cause
+                te_pred_cause_best = te_pred_y_cause
             
             print(f'cause_prediction: \ndev p {de_p:.4f} r {de_r:.4f} f1 {de_f1:.4f}')
             print(f'dev max_p {max_p_cause:.4f} max_r {max_r_cause:.4f} max_f1 {max_f1_cause:.4f}')
@@ -813,6 +849,23 @@ def run():
         cau_max_epoch_list.append(max_epoch_index_cause)
         
         print('Optimization Finished!\n')
+        
+        # 生成step2需要的会话格式文件
+        if max_f1_emo > 0.0:  # 只有当训练成功时才生成文件
+            conv_save_dir = os.path.join(save_dir, 'conv/')
+            if not os.path.exists(conv_save_dir):
+                os.makedirs(conv_save_dir)
+            
+            train_file_name = f'run{cur_run}_train.txt'
+            dev_file_name = f'run{cur_run}_dev.txt'
+            test_file_name = f'run{cur_run}_test.txt'
+            
+            write_conv_data(os.path.join(conv_save_dir, train_file_name), train_data, tr_pred_emotion_best, tr_pred_cause_best, word_idx_rev, spe_idx_rev)
+            write_conv_data(os.path.join(conv_save_dir, dev_file_name), dev_data, de_pred_emotion_best, de_pred_cause_best, word_idx_rev, spe_idx_rev)
+            write_conv_data(os.path.join(conv_save_dir, test_file_name), test_data, te_pred_emotion_best, te_pred_cause_best, word_idx_rev, spe_idx_rev)
+            
+            print(f'Generated conversation files for step2 in: {conv_save_dir}')
+        
         print('############# run {} end ###############\n'.format(cur_run))
         
         cur_run = cur_run + 1
@@ -821,6 +874,61 @@ def run():
 
 def main():
     run()
+
+def write_conv_data(file_name, dataset, pred_y_emo, pred_y_cause, word_idx_rev, spe_idx_rev):
+    """生成step2需要的会话格式文件，与原版保持一致"""
+    emotion_idx_rev = dict(zip(range(7), ['neutral','anger', 'disgust', 'fear', 'joy', 'sadness', 'surprise']))
+    
+    # Debug: print shapes to understand structure
+    print(f"Debug write_conv_data: pred_y_emo type={type(pred_y_emo)}, len/shape={len(pred_y_emo) if hasattr(pred_y_emo, '__len__') else 'no len'}")
+    if hasattr(pred_y_emo, '__len__') and len(pred_y_emo) > 0:
+        print(f"Debug write_conv_data: pred_y_emo[0] type={type(pred_y_emo[0])}, shape={pred_y_emo[0].shape if hasattr(pred_y_emo[0], 'shape') else 'no shape'}")
+    
+    with open(file_name, 'w', encoding='utf8') as g:
+        for i in range(len(dataset.doc_id)):
+            # 写入文档ID和长度
+            g.write(dataset.doc_id[i] + ' ' + str(dataset.doc_len[i]) + '\n')
+            # 写入真实的emotion-cause pairs
+            g.write(str(dataset.y_pairs[i]) + '\n')
+            
+            for j in range(dataset.doc_len[i]):
+                # 重构话语文本
+                utterance = ''
+                for k in range(dataset.sen_len[i][j]):
+                    if dataset.x[i][j][k] in word_idx_rev:
+                        utterance = utterance + word_idx_rev[dataset.x[i][j][k]] + ' '
+                
+                # 获取真实情绪标签 (y_emotion是one-hot或多标签格式)
+                if len(dataset.y_emotion.shape) == 3:  # [batch, seq, classes]
+                    true_emotion_idx = np.argmax(dataset.y_emotion[i][j])
+                else:  # [batch, seq]
+                    true_emotion_idx = dataset.y_emotion[i][j]
+                
+                # 写入格式: utterance_index | pred_emotion | pred_cause | speaker | true_emotion | utterance_text
+                pred_emo_val = pred_y_emo[i][j]
+                pred_cause_val = pred_y_cause[i][j]
+                
+                # 确保是标量值
+                if hasattr(pred_emo_val, 'item'):
+                    pred_emo_val = pred_emo_val.item()
+                elif isinstance(pred_emo_val, np.ndarray):
+                    pred_emo_val = pred_emo_val.item()
+                
+                if hasattr(pred_cause_val, 'item'):
+                    pred_cause_val = pred_cause_val.item()
+                elif isinstance(pred_cause_val, np.ndarray):
+                    pred_cause_val = pred_cause_val.item()
+                
+                g.write('{} | {} | {} | {} | {} | {}\n'.format(
+                    j+1, 
+                    int(pred_emo_val), 
+                    int(pred_cause_val), 
+                    spe_idx_rev.get(dataset.speaker[i][j], 'unknown'), 
+                    emotion_idx_rev[true_emotion_idx], 
+                    utterance.strip()
+                ))
+    
+    print('write {} done'.format(file_name))
 
 if __name__ == '__main__':
     main()

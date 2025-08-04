@@ -22,13 +22,17 @@ except ImportError:
 # 参数配置类 (对应原版的FLAGS)
 class Config:
     def __init__(self):
+        # 获取脚本所在目录的绝对路径
+        import os
+        script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        
         # >>>>>>>>>>>>>>>>>>>> For Model <<<<<<<<<<<<<<<<<<<< #
         ## embedding parameters ##
-        self.w2v_file = './data/ECF_glove_300.txt'
-        self.path = './data/'
-        self.video_emb_file = './data/features/video_embedding_4096.npy'
-        self.audio_emb_file = './data/features/audio_embedding_6373.npy' 
-        self.video_idx_file = './data/video_id_mapping.npy'
+        self.w2v_file = os.path.join(script_dir, 'data/ECF_glove_300.txt')
+        self.path = os.path.join(script_dir, 'data/')
+        self.video_emb_file = os.path.join(script_dir, 'data/video_embedding_4096.npy')
+        self.audio_emb_file = os.path.join(script_dir, 'data/audio_embedding_6373.npy')
+        self.video_idx_file = os.path.join(script_dir, 'data/video_id_mapping.npy')
         self.embedding_dim = 300
         self.embedding_dim_pos = 50
         ## input struct ##
@@ -52,7 +56,7 @@ class Config:
         self.end_run = 21
         self.training_iter = 12
 
-        self.log_path = './log'
+        self.log_path = os.path.join(script_dir, 'log')
         self.scope = 'TEMP'
         self.log_file_name = 'step2.log'
         self.save_pair = 'yes'
