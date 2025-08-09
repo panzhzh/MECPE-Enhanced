@@ -89,7 +89,7 @@ def pre_set():
         FLAGS.batch_size = 32
         FLAGS.learning_rate = 0.005
         FLAGS.keep_prob1 = 0.5
-        FLAGS.training_iter = 2  # Temporary: reduce to 2 epochs for testing
+        FLAGS.training_iter = 20  # Temporary: reduce to 2 epochs for testing
 
 def print_info():
     """打印模型和训练信息，与原版保持一致"""
@@ -421,6 +421,8 @@ def get_batch_data(dataset, is_training, batch_size):
 
 def run():
     """主运行函数，保持与原版相同的逻辑"""
+    import sys
+    import os
     pre_set()
     if not os.path.exists(FLAGS.log_path):
         os.makedirs(FLAGS.log_path)
@@ -436,15 +438,25 @@ def run():
         if cur_run == FLAGS.end_run:
             break
 
-        print_time()
-        print('\n############# run {} begin ###############'.format(cur_run))
+        if cur_run == 1:
+            print_time()
+        print('############# run {} begin ###############'.format(cur_run))
         
-        # 加载词向量和多模态特征
+        # 加载词向量和多模态特征 (只在第一个run显示详细信息)
+        if cur_run > 1:
+            # 临时重定向stdout来隐藏数据加载日志
+            old_stdout = sys.stdout
+            sys.stdout = open(os.devnull, 'w')
+        
         word_idx_rev, word_idx, spe_idx_rev, spe_idx, word_embedding, _ = load_w2v(
             FLAGS.embedding_dim, FLAGS.embedding_dim_pos, 
             FLAGS.path+'all_data_pair.txt', FLAGS.w2v_file)
         video_idx, video_embedding, audio_embedding = load_embedding_from_npy(
             FLAGS.video_idx_file, FLAGS.video_emb_file, FLAGS.audio_emb_file)
+        
+        if cur_run > 1:
+            sys.stdout.close()
+            sys.stdout = old_stdout
         
         # 获取BERT tokenizer
         def get_bert_tokenizer():
@@ -454,11 +466,22 @@ def run():
         
         tokenizer = get_bert_tokenizer()
         
-        # 创建数据集
+        # 创建数据集 (静默加载后续run，避免重复日志)
+        if cur_run > 1:
+            old_stdout = sys.stdout
+            sys.stdout = open(os.devnull, 'w')
+        else:
+            print('Loading datasets...')
+            
         train_data = MECPEDataset(FLAGS.path+'train.txt', tokenizer, word_idx, video_idx, spe_idx)
         dev_data = MECPEDataset(FLAGS.path+'dev.txt', tokenizer, word_idx, video_idx, spe_idx)
         test_data = MECPEDataset(FLAGS.path+'test.txt', tokenizer, word_idx, video_idx, spe_idx)
-        print('train docs: {}  dev docs: {}  test docs: {}'.format(len(train_data), len(dev_data), len(test_data)))
+        
+        if cur_run > 1:
+            sys.stdout.close()
+            sys.stdout = old_stdout
+        if cur_run == 1:
+            print('train docs: {}  dev docs: {}  test docs: {}'.format(len(train_data), len(dev_data), len(test_data)))
         
         # 准备embeddings (转换为PyTorch tensor)
         word_embedding = torch.tensor(word_embedding, dtype=torch.float32).to(device)
@@ -470,10 +493,12 @@ def run():
             'audio_embedding': audio_embedding
         }
 
-        print('\nbuild model...')
+        if cur_run == 1:
+            print('\nbuild model...')
         model = build_model(embeddings, device)
         
-        print('build model done!\n')
+        if cur_run == 1:
+            print('build model done!\n')
         
         # 定义损失函数和优化器
         criterion_emotion = nn.CrossEntropyLoss(reduction='none')
@@ -495,7 +520,9 @@ def run():
         dev_loader = get_batch_data(dev_data, is_training=False, batch_size=FLAGS.batch_size)
         test_loader = get_batch_data(test_data, is_training=False, batch_size=FLAGS.batch_size)
         
-        print_info()
+        # 只在第一个run打印配置信息
+        if cur_run == 1:
+            print_info()
         
         # 训练循环
         max_f1_emo, max_f1_cause = -1.0, -1.0
@@ -516,11 +543,12 @@ def run():
             step = 1
             model.train()
             
-            print(f'\n############# epoch {epoch+1} begin ###############')
+            print(f'############# epoch {epoch+1} begin ###############')
             
             # 训练
             epoch_train_results = []
-            for batch in train_loader:
+            total_steps = len(train_loader)
+            for batch_idx, batch in enumerate(train_loader, 1):
                 optimizer.zero_grad()
                 
                 # 前向传播
@@ -599,20 +627,10 @@ def run():
                     
                     epoch_train_results.append([pred_y_cause, true_y_cause, pred_y_emo, true_y_emo, doc_len_batch])
                 
-                # 每10步显示一次训练信息
-                if step % 10 == 0:
+                # 每20步显示一次简化训练信息 (减少输出频率)
+                if step % 20 == 0:
                     current_lr = optimizer.param_groups[0]['lr']
-                    print(f'step {step}: train loss {total_loss:.4f} emotion {loss_emotion:.4f} cause {loss_cause:.4f} lr {current_lr:.6f}')
-                    p, r, f1 = cal_prf(pred_y_emo, true_y_emo, doc_len_batch)
-                    print(f'emotion_prediction: train p {p:.4f} r {r:.4f} f1 {f1:.4f}')
-                    p, r, f1 = cal_prf(pred_y_cause, true_y_cause, doc_len_batch)
-                    print(f'cause_prediction: train p {p:.4f} r {r:.4f} f1 {f1:.4f}')
-                    
-                    if FLAGS.choose_emocate:
-                        emo_f1_emocate = cal_prf_emocate(pred_y_emo, true_y_emo, doc_len_batch)
-                        print(f'emotion_prediction_emocate: train f1 {np.around(emo_f1_emocate, decimals=2)}')
-                    print(f'\ncost time: {time.time()-start_time:.1f}s\n')
-                    start_time = time.time()
+                    print(f'step {step}: train loss {total_loss:.4f} lr {current_lr:.6f}')
                 
                 step += 1
             
@@ -787,7 +805,7 @@ def run():
             te_true_y_emo = te_true_y_emo_list
             te_doc_len_batch = te_doc_len_list
             
-            print(f'\nepoch {epoch}: test loss {te_loss:.4f} {te_loss_e:.4f} {te_loss_c:.4f} cost time: {time.time()-start_time:.1f}s\n')
+            print(f'epoch {epoch}: test loss {te_loss:.4f} cost time: {time.time()-start_time:.1f}s')
             
             # 计算评估指标 - 处理批次列表
             def calc_prf_from_batch_lists(pred_lists, true_lists, doc_len_lists):
@@ -842,10 +860,7 @@ def run():
                     de_pred_emotion_best = de_pred_y_emo  
                     te_pred_emotion_best = te_pred_y_emo
                 
-                print(f'emotion_prediction_emocate: \ndev f1 {np.around(de_f1_emo_emocate, decimals=4)}')
-                print(f'dev max_f1 {max_f1_emo_emocate:.4f}')
-                print(f'test f1 {np.around(te_f1_emo_emocate, decimals=4)}')
-                print(f'test max_f1 {np.around(te_max_f1_emo_emocate, decimals=4)}\n')
+                print(f'emotion_emocate: dev_f1 {de_f1_emo_emocate[-1]:.4f} (max {max_f1_emo_emocate:.4f}) test_f1 {te_f1_emo_emocate[-1]:.4f}')
             else:
                 # 使用批次列表计算评价指标
                 de_p, de_r, de_f1 = calc_prf_from_batch_lists(de_pred_y_emo, de_true_y_emo, de_doc_len_batch)
@@ -860,10 +875,7 @@ def run():
                     de_pred_emotion_best = de_pred_y_emo  
                     te_pred_emotion_best = te_pred_y_emo
                 
-                print(f'emotion_prediction: \ndev p {de_p:.4f} r {de_r:.4f} f1 {de_f1:.4f}')
-                print(f'dev max_p {max_p_emo:.4f} max_r {max_r_emo:.4f} max_f1 {max_f1_emo:.4f}')
-                print(f'test p {te_p:.4f} r {te_r:.4f} f1 {te_f1:.4f}')
-                print(f'test max_p {te_max_p_emo:.4f} max_r {te_max_r_emo:.4f} max_f1 {te_max_f1_emo:.4f}\n')
+                print(f'emotion: dev_f1 {de_f1:.4f} (max {max_f1_emo:.4f}) test_f1 {te_f1:.4f} (max {te_max_f1_emo:.4f})')
             
             # 原因预测评估 - 使用批次列表计算评价指标
             de_p, de_r, de_f1 = calc_prf_from_batch_lists(de_pred_y_cause, de_true_y_cause, de_doc_len_batch)
@@ -878,10 +890,7 @@ def run():
                 de_pred_cause_best = de_pred_y_cause
                 te_pred_cause_best = te_pred_y_cause
             
-            print(f'cause_prediction: \ndev p {de_p:.4f} r {de_r:.4f} f1 {de_f1:.4f}')
-            print(f'dev max_p {max_p_cause:.4f} max_r {max_r_cause:.4f} max_f1 {max_f1_cause:.4f}')
-            print(f'test p {te_p:.4f} r {te_r:.4f} f1 {te_f1:.4f}')
-            print(f'test max_p {te_max_p_cause:.4f} max_r {te_max_r_cause:.4f} max_f1 {te_max_f1_cause:.4f}\n')
+            print(f'cause: dev_f1 {de_f1:.4f} (max {max_f1_cause:.4f}) test_f1 {te_f1:.4f} (max {te_max_f1_cause:.4f})\n')
         
         # 记录最终结果
         if FLAGS.choose_emocate:
