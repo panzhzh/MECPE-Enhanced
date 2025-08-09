@@ -41,8 +41,8 @@ class Config:
         ## model struct ##
         self.choose_emocate = ''
         self.emocate_eval = 6
-        self.use_x_v = ''
-        self.use_x_a = ''
+        self.use_x_v = 'use'
+        self.use_x_a = 'use'
         self.n_hidden = 100
         self.n_class = 2
         # >>>>>>>>>>>>>>>>>>>> For Training <<<<<<<<<<<<<<<<<<<< #
@@ -359,27 +359,46 @@ def run():
                 print('step {}: train loss {:.4f} acc {:.4f}'.format(step, loss.item(), acc.item()))
                 step = step + 1
 
-            def evaluate(test_data):
-                """评估函数"""
+            def evaluate(test_data, is_dev=True):
+                """评估函数 - 使用新的结果收集方法"""
                 model.eval()
+                
+                # 收集所有批次的结果
+                all_losses = []
+                all_pred_y = []
+                all_true_y = []
+                
                 with torch.no_grad():
-                    test_batch = [t.to(device) for t in test_data.all]
-                    x, sen_len, distance, x_emocate, x_v, y = test_batch
+                    for batch_data, batch_index in get_batch_data(test_data, is_training=0, batch_size=FLAGS.batch_size):
+                        x, sen_len, distance, x_emocate, x_v, y = [t.to(device) for t in batch_data]
+                        
+                        pred_pair = model(x, sen_len, distance, x_emocate, x_v, is_training=False)
+                        loss = criterion(pred_pair, y.argmax(dim=1))
+                        l2_reg = sum(p.pow(2.0).sum() for p in model.parameters())
+                        loss = loss + FLAGS.l2_reg * l2_reg
+                        
+                        pred_y_batch = pred_pair.argmax(dim=1).cpu().numpy()
+                        true_y_batch = y.argmax(dim=1).cpu().numpy()
+                        
+                        all_losses.append(loss.item())
+                        all_pred_y.append(pred_y_batch)
+                        all_true_y.append(true_y_batch)
+                
+                # 使用 np.concatenate 拼接完整数组
+                avg_loss = np.mean(all_losses)
+                complete_pred_y = np.concatenate(all_pred_y, axis=0)
+                complete_true_y = np.concatenate(all_true_y, axis=0)
+                
+                # 对完整数组调用评价函数
+                if FLAGS.choose_emocate:
+                    eval_result = prf_2nd_step_emocate(test_data.pair_id_all, test_data.pair_id, complete_pred_y)
+                else:
+                    eval_result = prf_2nd_step(test_data.pair_id_all, test_data.pair_id, complete_pred_y)
                     
-                    pred_pair = model(x, sen_len, distance, x_emocate, x_v, is_training=False)
-                    loss = criterion(pred_pair, y.argmax(dim=1))
-                    l2_reg = sum(p.pow(2.0).sum() for p in model.parameters())
-                    loss = loss + FLAGS.l2_reg * l2_reg
-                    
-                    te_pred_y = pred_pair.argmax(dim=1).cpu().numpy()
-                    te_true_y = y.argmax(dim=1).cpu().numpy()
-                    
-                    if FLAGS.choose_emocate:
-                        return loss.item(), prf_2nd_step_emocate(test_data.pair_id_all, test_data.pair_id, te_pred_y), te_pred_y
-                    return loss.item(), prf_2nd_step(test_data.pair_id_all, test_data.pair_id, te_pred_y), te_pred_y
+                return avg_loss, eval_result, complete_pred_y
 
-            dev_loss, dev_eval, de_pred_y = evaluate(dev_data)
-            test_loss, test_eval, te_pred_y = evaluate(test_data)
+            dev_loss, dev_eval, de_pred_y = evaluate(dev_data, is_dev=True)
+            test_loss, test_eval, te_pred_y = evaluate(test_data, is_dev=False)
 
             dev_eval, test_eval = map(lambda x: np.array(x), [dev_eval, test_eval])
             print('\nepoch {}: cost time {:.1f} s  dev_loss {:.4f}  test_loss {:.4f}\n'.format(i, time.time()-start_time, dev_loss, test_loss))
